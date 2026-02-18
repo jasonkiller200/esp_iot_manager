@@ -22,8 +22,15 @@ class Device(db.Model):
         """判斷設備是否在線（預設5分鐘內有活動視為在線）"""
         if not self.last_seen:
             return False
+        
+        # 確保 last_seen 有時區資訊
+        if self.last_seen.tzinfo is None:
+            last_seen = self.last_seen.replace(tzinfo=TAIPEI_TZ)
+        else:
+            last_seen = self.last_seen
+        
         now = datetime.now(TAIPEI_TZ)
-        return (now - self.last_seen).total_seconds() < timeout_minutes * 60
+        return (now - last_seen).total_seconds() < timeout_minutes * 60
 
     def __repr__(self):
         return f"<Device {self.mac} @ {self.ip}>"
