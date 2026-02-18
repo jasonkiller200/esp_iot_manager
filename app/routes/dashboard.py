@@ -32,9 +32,24 @@ def device_detail(device_mac):
     device = Device.query.filter_by(mac=device_mac).first_or_404()
     datastreams = DataStream.query.filter_by(device_mac=device_mac).all()
     
+    # 將 DataStream 轉換為可序列化的字典列表
+    datastreams_json = [
+        {
+            'id': ds.id,
+            'pin': ds.pin,
+            'name': ds.name,
+            'data_type': ds.data_type,
+            'min_value': ds.min_value,
+            'max_value': ds.max_value,
+            'unit': ds.unit
+        }
+        for ds in datastreams
+    ]
+    
     return render_template('device_detail.html', 
                          device=device,
-                         datastreams=datastreams)
+                         datastreams=datastreams,
+                         datastreams_json=datastreams_json)
 
 
 @dashboard_bp.route('/api/devices')

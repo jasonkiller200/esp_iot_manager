@@ -218,7 +218,7 @@
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const deviceMac = '{{ device.mac }}';
-        const datastreams = {{ datastreams | tojson }};
+        const datastreams = {{ datastreams_json | tojson }};
         const charts = {};
         const chartData = {};
         
