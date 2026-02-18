@@ -13,6 +13,10 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    # 初始化 MQTT Manager
+    from app.mqtt_manager import mqtt_manager
+    mqtt_manager.init_app(app)
+
     # 註冊 Blueprints (C: Controllers)
     from app.routes.main import main_bp
     from app.routes.api import api_bp
