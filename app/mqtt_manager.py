@@ -149,6 +149,13 @@ class MQTTManager:
                 print(f"✅ Saved: {mac_address}/{pin} = {value}")  # 調試
                 logger.info(f"✅ Saved: {mac_address}/{pin} = {value}")
                 
+                # 透過 WebSocket 推送即時數據
+                try:
+                    from app.routes.dashboard import broadcast_data_update
+                    broadcast_data_update(mac_address, pin, value)
+                except Exception as e:
+                    logger.error(f"Failed to broadcast data update: {e}")
+                
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"Database error: {e}")
@@ -170,6 +177,13 @@ class MQTTManager:
                     
                     db.session.commit()
                     logger.info(f"Updated device status: {mac_address}")
+                    
+                    # 透過 WebSocket 推送設備狀態
+                    try:
+                        from app.routes.dashboard import broadcast_device_status
+                        broadcast_device_status(mac_address, status)
+                    except Exception as e:
+                        logger.error(f"Failed to broadcast device status: {e}")
                 
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON in status message: {payload}")

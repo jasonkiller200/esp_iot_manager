@@ -46,6 +46,13 @@ def blynk_update_pin(device_token, pin):
     
     print(f"[Blynk API] {device_token}/{pin} = {value}")
     
+    # 透過 WebSocket 推送即時數據
+    try:
+        from app.routes.dashboard import broadcast_data_update
+        broadcast_data_update(device.mac, pin, value)
+    except Exception as e:
+        print(f"Failed to broadcast: {e}")
+    
     return jsonify({"success": True})
 
 

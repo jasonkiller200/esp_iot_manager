@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設備監控 - {{ device.mac }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            padding: 2rem 0;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            border: none;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            font-weight: bold;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .metric-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .metric-unit {
+            font-size: 1.2rem;
+            color: #999;
+            margin-left: 0.3rem;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 1rem 0;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .status-online {
+            background: #28a745;
+            box-shadow: 0 0 10px #28a745;
+        }
+        .status-offline {
+            background: #dc3545;
+        }
+        .header-title {
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .update-time {
+            font-size: 0.8rem;
+            color: #999;
+            text-align: right;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <i class="bi bi-circle-fill text-warning pulse"></i> 連接中...
+    </div>
+
+    <div class="container">
+        <!-- 頁首 -->
+        <div class="text-center mb-4">
+            <a href="/dashboard" class="btn btn-light mb-3">
+                <i class="bi bi-arrow-left"></i> 返回儀表板
+            </a>
+            <h1 class="header-title">
+                <i class="bi bi-router"></i> 設備即時監控
+            </h1>
+            <p class="text-white">
+                <span class="status-indicator {% if device.is_online() %}status-online{% else %}status-offline{% endif %}"></span>
+                {{ device.mac }} - {{ device.chip_type }}
+            </p>
+        </div>
+
+        <!-- 設備資訊卡 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> 設備資訊
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>MAC 地址:</strong><br>
+                        <code>{{ device.mac }}</code>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>IP 地址:</strong><br>
+                        {{ device.ip or 'N/A' }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>韌體版本:</strong><br>
+                        {{ device.version or 'N/A' }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>最後上線:</strong><br>
+                        <span id="lastSeen">{{ device.last_seen.strftime('%Y-%m-%d %H:%M:%S') if device.last_seen else 'N/A' }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 即時數據指標 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-speedometer"></i> 即時數據
+                <button class="btn btn-sm btn-light float-end" onclick="refreshAllData()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="stats-grid" id="metricsGrid">
+                    {% for ds in datastreams %}
+                    <div class="metric-card" data-pin="{{ ds.pin }}">
+                        <div class="metric-value" id="value-{{ ds.pin }}">
+                            <span class="spinner-border spinner-border-sm"></span>
+                        </div>
+                        <div class="metric-label">
+                            <i class="bi bi-diagram-3"></i> {{ ds.name }}
+                            <span class="badge bg-secondary">{{ ds.pin }}</span>
+                        </div>
+                        <div class="update-time" id="time-{{ ds.pin }}">載入中...</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 即時圖表 -->
+        {% for ds in datastreams %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> {{ ds.name }} ({{ ds.pin }}) - 即時趨勢
+                <select class="form-select form-select-sm d-inline-block w-auto float-end" 
+                        onchange="changeTimeRange('{{ ds.pin }}', this.value)">
+                    <option value="1">最近 1 小時</option>
+                    <option value="6">最近 6 小時</option>
+                    <option value="24" selected>最近 24 小時</option>
+                    <option value="168">最近 7 天</option>
+                </select>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="chart-{{ ds.pin }}"></canvas>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-3 text-center">
+                        <strong>最小值</strong><br>
+                        <span class="text-primary" id="min-{{ ds.pin }}">--</span>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <strong>最大值</strong><br>
+                        <span class="text-danger" id="max-{{ ds.pin }}">--</span>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <strong>平均值</strong><br>
+                        <span class="text-success" id="avg-{{ ds.pin }}">--</span>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <strong>數據點數</strong><br>
+                        <span class="text-info" id="count-{{ ds.pin }}">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const deviceMac = '{{ device.mac }}';
+        const datastreams = {{ datastreams | tojson }};
+        const charts = {};
+        const chartData = {};
+        
+        // 初始化 WebSocket
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('[WebSocket] Connected');
+            updateConnectionStatus('connected');
+            socket.emit('subscribe_device', { device_mac: deviceMac });
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('[WebSocket] Disconnected');
+            updateConnectionStatus('disconnected');
+        });
+        
+        socket.on('data_update', (data) => {
+            if (data.device_mac === deviceMac) {
+                console.log('[WebSocket] Data update:', data);
+                updateMetric(data.pin, data.value, data.timestamp);
+                addChartData(data.pin, data.value, data.timestamp);
+            }
+        });
+        
+        function updateConnectionStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (status === 'connected') {
+                statusEl.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已連接';
+            } else {
+                statusEl.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 未連接';
+            }
+        }
+        
+        function updateMetric(pin, value, timestamp) {
+            const valueEl = document.getElementById(`value-${pin}`);
+            const timeEl = document.getElementById(`time-${pin}`);
+            
+            if (valueEl) {
+                // 格式化數值
+                let displayValue = value;
+                if (!isNaN(value)) {
+                    displayValue = parseFloat(value).toFixed(2);
+                }
+                valueEl.innerHTML = displayValue;
+            }
+            
+            if (timeEl) {
+                const date = new Date(timestamp);
+                timeEl.textContent = `更新於 ${date.toLocaleTimeString('zh-TW')}`;
+            }
+        }
+        
+        function initChart(pin, data) {
+            const ctx = document.getElementById(`chart-${pin}`);
+            if (!ctx) return;
+            
+            const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString('zh-TW'));
+            const values = data.map(d => parseFloat(d.value) || 0);
+            
+            chartData[pin] = { labels, values };
+            
+            charts[pin] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: pin,
+                        data: values,
+                        borderColor: 'rgb(102, 126, 234)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
+            
+            // 更新統計
+            if (values.length > 0) {
+                document.getElementById(`min-${pin}`).textContent = Math.min(...values).toFixed(2);
+                document.getElementById(`max-${pin}`).textContent = Math.max(...values).toFixed(2);
+                document.getElementById(`avg-${pin}`).textContent = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
+                document.getElementById(`count-${pin}`).textContent = values.length;
+            }
+        }
+        
+        function addChartData(pin, value, timestamp) {
+            if (!charts[pin]) return;
+            
+            const chart = charts[pin];
+            const label = new Date(timestamp).toLocaleTimeString('zh-TW');
+            const numValue = parseFloat(value) || 0;
+            
+            chart.data.labels.push(label);
+            chart.data.datasets[0].data.push(numValue);
+            
+            // 限制數據點數量
+            if (chart.data.labels.length > 100) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+            }
+            
+            chart.update('none');
+        }
+        
+        function loadChartData(pin, hours = 24) {
+            fetch(`/dashboard/api/device/${deviceMac}/data/${pin}?hours=${hours}&limit=100`)
+                .then(res => res.json())
+                .then(data => {
+                    initChart(pin, data);
+                })
+                .catch(err => console.error(`Error loading data for ${pin}:`, err));
+        }
+        
+        function changeTimeRange(pin, hours) {
+            if (charts[pin]) {
+                charts[pin].destroy();
+            }
+            loadChartData(pin, hours);
+        }
+        
+        function refreshAllData() {
+            fetch(`/dashboard/api/device/${deviceMac}/datastreams`)
+                .then(res => res.json())
+                .then(streams => {
+                    streams.forEach(ds => {
+                        if (ds.latest_value) {
+                            updateMetric(ds.pin, ds.latest_value, ds.latest_time);
+                        }
+                    });
+                })
+                .catch(err => console.error('Error refreshing data:', err));
+        }
+        
+        // 初始化所有圖表
+        datastreams.forEach(ds => {
+            loadChartData(ds.pin, 24);
+        });
+        
+        // 載入初始數據
+        refreshAllData();
+        
+        // 每10秒自動刷新
+        setInterval(refreshAllData, 10000);
+    </script>
+</body>
+</html>
