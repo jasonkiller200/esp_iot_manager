@@ -14,7 +14,7 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     migrate.init_app(app, db)
-    socketio.init_app(app, cors_allowed_origins="*")
+    socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
     # 初始化 MQTT Manager
     from app.mqtt_manager import mqtt_manager
