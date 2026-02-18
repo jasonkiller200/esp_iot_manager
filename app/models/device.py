@@ -18,5 +18,12 @@ class Device(db.Model):
     pending_update = db.Column(db.Boolean, default=False)
     target_version = db.Column(db.String(20), nullable=True)
 
+    def is_online(self, timeout_minutes=5):
+        """判斷設備是否在線（預設5分鐘內有活動視為在線）"""
+        if not self.last_seen:
+            return False
+        now = datetime.now(TAIPEI_TZ)
+        return (now - self.last_seen).total_seconds() < timeout_minutes * 60
+
     def __repr__(self):
         return f"<Device {self.mac} @ {self.ip}>"
