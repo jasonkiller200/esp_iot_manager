@@ -20,8 +20,10 @@ def create_app(config_class=Config):
     # 註冊 Blueprints (C: Controllers)
     from app.routes.main import main_bp
     from app.routes.api import api_bp
+    from app.routes.blynk_api import blynk_bp
     
     app.register_blueprint(main_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(blynk_bp, url_prefix='/blynk')
 
     return app
