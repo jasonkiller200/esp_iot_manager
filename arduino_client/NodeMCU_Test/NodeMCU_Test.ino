@@ -16,11 +16,11 @@
 
 // ==================== 設定區 ====================
 // WiFi 設定
-const char* ssid = "YOUR_WIFI_SSID";          // 修改為你的 WiFi 名稱
-const char* password = "YOUR_WIFI_PASSWORD";  // 修改為你的 WiFi 密碼
+const char* ssid = "ASUS_A8_2G";          // 修改為你的 WiFi 名稱
+const char* password = "iti422utt";  // 修改為你的 WiFi 密碼
 
 // 伺服器設定
-const char* serverUrl = "http://192.168.1.100:5000";  // 修改為你的伺服器 IP
+const char* serverUrl = "http://192.168.50.170:5000";  // 修改為你的伺服器 IP
 
 // 發送間隔 (毫秒)
 const unsigned long sendInterval = 5000;  // 每 5 秒發送一次

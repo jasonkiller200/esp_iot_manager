@@ -12,7 +12,12 @@
 </head>
 <body class="bg-light">
     <div class="container mt-5">
-        <h1 class="mb-4 text-primary">ESP-IoT 管理控制台 <span class="badge bg-secondary">MVP</span></h1>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="text-primary m-0">ESP-IoT 管理控制台 <span class="badge bg-secondary">MVP</span></h1>
+            <a href="/dashboard" class="btn btn-success btn-lg shadow-sm">
+                <i class="bi bi-speedometer2"></i> 前往監控儀表板
+            </a>
+        </div>
         
         <!-- 顯示 flash 訊息 -->
         {% with messages = get_flashed_messages(with_categories=true) %}

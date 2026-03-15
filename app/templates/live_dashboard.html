@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全螢幕即時監控儀表板</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 15px;
+        }
+        .header-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin: 0;
+        }
+        .live-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .device-node {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #334155;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .device-node:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+        .device-node.offline {
+            opacity: 0.6;
+            filter: grayscale(0.5);
+        }
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+        .node-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .node-mac {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-online { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+        .status-offline { background-color: #ef4444; }
+
+        .datastream-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ds-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 8px;
+        }
+        .ds-label {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .ds-value-wrap {
+            text-align: right;
+        }
+        .ds-value {
+            font-size: 1.4rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            transition: color 0.3s;
+        }
+        .ds-unit {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-left: 4px;
+        }
+        
+        .update-flash {
+            animation: flash 0.5s ease-out;
+        }
+        @keyframes flash {
+            0% { background-color: rgba(56, 189, 248, 0.3); }
+            100% { background-color: transparent; }
+        }
+
+        .clock {
+            font-family: monospace;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+        }
+        
+        .btn-back {
+            color: var(--text-secondary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+        }
+        .btn-back:hover {
+            color: var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <div>
+            <a href="/dashboard" class="btn-back"><i class="bi bi-arrow-left"></i> 返回主控台</a>
+            <h1 class="header-title"><i class="bi bi-cpu-fill"></i> 即時監控調度中心</h1>
+        </div>
+        <div class="text-end">
+            <div class="clock" id="clock">00:00:00</div>
+            <div id="connectionStatus">
+                <span class="status-dot status-offline"></span> WebSocket 未連接
+            </div>
+        </div>
+    </div>
+
+    <div class="live-grid" id="liveGrid">
+        {% for device in devices %}
+        <div class="device-node {% if not device.is_online() %}offline{% endif %}" id="node-{{ device.mac }}" data-mac="{{ device.mac }}">
+            <div class="node-header">
+                <div>
+                    <h3 class="node-name">{{ device.name or '未命名設備' }}</h3>
+                    <div class="node-mac">{{ device.mac }}</div>
+                </div>
+                <span class="status-dot {% if device.is_online() %}status-online{% else %}status-offline{% endif %}" id="status-{{ device.mac }}"></span>
+            </div>
+            
+            <div class="datastream-list" id="ds-list-{{ device.mac }}">
+                <!-- 數據流將由 JS 動態載入 -->
+                <div class="text-center py-3 text-muted">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        const devices = {};
+
+        // 更新時鐘
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString('zh-TW', { hour12: false });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        socket.on('connect', () => {
+            document.getElementById('connectionStatus').innerHTML = '<span class="status-dot status-online"></span> WebSocket 已連接';
+            console.log('Connected to server');
+            
+            // 載入所有設備的數據流
+            loadAllDatastreams();
+        });
+
+        socket.on('disconnect', () => {
+            document.getElementById('connectionStatus').innerHTML = '<span class="status-dot status-offline"></span> WebSocket 已中斷';
+        });
+
+        socket.on('data_update', (data) => {
+            console.log('Received data update:', data);
+            updateValueUI(data.device_mac, data.pin, data.value);
+        });
+
+        socket.on('device_status', (data) => {
+            const mac = data.device_mac;
+            const isOnline = data.status.online;
+            const node = document.getElementById(`node-${mac}`);
+            const dot = document.getElementById(`status-${mac}`);
+            
+            if (node) {
+                if (isOnline) node.classList.remove('offline');
+                else node.classList.add('offline');
+            }
+            if (dot) {
+                dot.className = `status-dot ${isOnline ? 'status-online' : 'status-offline'}`;
+            }
+        });
+
+        function loadAllDatastreams() {
+            const nodes = document.querySelectorAll('.device-node');
+            nodes.forEach(node => {
+                const mac = node.getAttribute('data-mac');
+                fetch(`/dashboard/api/device/${mac}/datastreams`)
+                    .then(res => res.json())
+                    .then(datastreams => {
+                        renderDatastreams(mac, datastreams);
+                    });
+            });
+        }
+
+        function renderDatastreams(mac, datastreams) {
+            const list = document.getElementById(`ds-list-${mac}`);
+            if (!list) return;
+            
+            if (datastreams.length === 0) {
+                list.innerHTML = '<div class="text-center py-2 text-muted small">無可用數據流</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+            datastreams.forEach(ds => {
+                const item = document.createElement('div');
+                item.className = 'ds-item';
+                item.id = `ds-item-${mac}-${ds.pin}`;
+                
+                const label = ds.name || ds.pin;
+                const value = ds.latest_value !== null ? ds.latest_value : '--';
+                const unit = ds.unit || '';
+                const color = ds.color || '#38bdf8';
+
+                item.innerHTML = `
+                    <div class="ds-label">${label}</div>
+                    <div class="ds-value-wrap">
+                        <span class="ds-value" style="color: ${color}" id="val-${mac}-${ds.pin}">${value}</span>
+                        <span class="ds-unit">${unit}</span>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function updateValueUI(mac, pin, value) {
+            const valEl = document.getElementById(`val-${mac}-${pin}`);
+            const itemEl = document.getElementById(`ds-item-${mac}-${pin}`);
+            
+            if (valEl) {
+                // 格式化數值
+                let displayValue = value;
+                if (!isNaN(value)) {
+                    displayValue = parseFloat(value).toFixed(2);
+                }
+                valEl.textContent = displayValue;
+                
+                // 視覺閃爍回饋
+                if (itemEl) {
+                    itemEl.classList.remove('update-flash');
+                    void itemEl.offsetWidth; // 觸發 reflow
+                    itemEl.classList.add('update-flash');
+                }
+            } else {
+                // 如果找不到對象，可能是新數據流，刷新列表
+                loadAllDatastreams();
+            }
+        }
+    </script>
+</body>
+</html>

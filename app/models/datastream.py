@@ -18,6 +18,7 @@ class DataStream(db.Model):
     min_value = db.Column(db.Float, default=0)
     max_value = db.Column(db.Float, default=100)
     unit = db.Column(db.String(20))  # 如 "°C", "%", "lux"
+    color = db.Column(db.String(20), default='#667eea')  # 顯示顏色
     
     __table_args__ = (db.UniqueConstraint('device_mac', 'pin', name='_device_pin_uc'),)
     

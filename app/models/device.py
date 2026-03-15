@@ -11,6 +11,7 @@ def get_taipei_time():
 class Device(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     mac = db.Column(db.String(20), unique=True, nullable=False)
+    name = db.Column(db.String(50))  # 設備名稱 (自定義)
     ip = db.Column(db.String(20))
     version = db.Column(db.String(20))
     last_seen = db.Column(db.DateTime, default=get_taipei_time)

@@ -92,6 +92,7 @@ def api_device_datastreams(device_mac):
             'min': ds.min_value,
             'max': ds.max_value,
             'unit': ds.unit,
+            'color': ds.color,
             'latest_value': latest.value if latest else None,
             'latest_time': latest.timestamp.isoformat() if latest else None
         })
@@ -161,6 +162,67 @@ def api_device_stats(device_mac):
             }
     
     return jsonify(result)
+
+
+@dashboard_bp.route('/device/<device_mac>/edit', methods=['POST'])
+def edit_device(device_mac):
+    """編輯設備資訊"""
+    device = Device.query.filter_by(mac=device_mac).first_or_404()
+    data = request.json
+    
+    if 'name' in data:
+        device.name = data['name']
+    
+    db.session.commit()
+    return jsonify({'status': 'ok', 'name': device.name})
+
+
+@dashboard_bp.route('/device/<device_mac>/delete', methods=['POST'])
+def delete_device(device_mac):
+    """刪除設備及其所有數據"""
+    device = Device.query.filter_by(mac=device_mac).first_or_404()
+    
+    # 刪除關聯的數據點和數據流
+    DataPoint.query.filter_by(device_mac=device_mac).delete()
+    DataStream.query.filter_by(device_mac=device_mac).delete()
+    
+    db.session.delete(device)
+    db.session.commit()
+    
+    return jsonify({'status': 'ok'})
+
+
+@dashboard_bp.route('/datastream/<int:ds_id>/edit', methods=['POST'])
+def edit_datastream(ds_id):
+    """編輯數據流設定"""
+    ds = DataStream.query.get_or_404(ds_id)
+    data = request.json
+    
+    if 'name' in data:
+        ds.name = data['name']
+    if 'unit' in data:
+        ds.unit = data['unit']
+    if 'color' in data:
+        ds.color = data['color']
+    if 'min_value' in data:
+        ds.min_value = float(data['min_value'])
+    if 'max_value' in data:
+        ds.max_value = float(data['max_value'])
+        
+    db.session.commit()
+    return jsonify({
+        'status': 'ok',
+        'name': ds.name,
+        'unit': ds.unit,
+        'color': ds.color
+    })
+
+
+@dashboard_bp.route('/live')
+def live_dashboard():
+    """即時全螢幕儀表板"""
+    devices = Device.query.all()
+    return render_template('live_dashboard.html', devices=devices)
 
 
 # ==================== WebSocket Events ====================
