@@ -16,14 +16,30 @@
 #endif
 
 #include <ArduinoJson.h>
+#include <WiFiManager.h>
 
 class ESP_IoT_Manager {
 public:
     // 建構函式
     ESP_IoT_Manager(const char* ssid, const char* password, const char* serverIP, int serverPort = 5000);
+    ESP_IoT_Manager(const char* serverIP, int serverPort = 5000);
     
     // 初始化連線
     bool begin(const char* deviceVersion = "1.0.0");
+
+    // 啟用配網引導（Captive Portal）
+    void enableProvisioning(
+        bool enable = true,
+        const char* apNamePrefix = "ESP-IoT-Setup",
+        const char* apPassword = nullptr,
+        uint16_t portalTimeoutSec = 180
+    );
+
+    // 動態設定 WiFi 帳密（可與配網併用）
+    void setWiFiCredentials(const char* ssid, const char* password);
+
+    // 清除已儲存 WiFi 設定（下次開機重新配網）
+    void clearWiFiCredentials();
     
     // 主循環（處理心跳、WebSocket）
     void loop();
@@ -35,6 +51,16 @@ public:
     
     // 批量發送多個 Pin
     bool sendMultiple(const char* pins[], const char* values[], int count);
+
+    // 註冊 Datastream 定義
+    bool registerDatastream(
+        const char* pin,
+        const char* name,
+        float minValue,
+        float maxValue,
+        const char* unit,
+        const char* dataType = "double"
+    );
     
     // 註冊接收控制指令的回調函式
     void onControlMessage(void (*callback)(String pin, String value));
@@ -62,10 +88,18 @@ private:
     // WebSocket 客戶端
     WebSocketsClient _webSocket;
     bool _wsConnected;
+
+    // 配網設定
+    bool _useProvisioning;
+    String _apNamePrefix;
+    String _apPassword;
+    uint16_t _portalTimeoutSec;
     
     // 心跳計時器
     unsigned long _lastHeartbeat;
     unsigned long _heartbeatInterval;
+    unsigned long _lastWiFiRetry;
+    unsigned long _wifiRetryInterval;
     
     // 回調函式
     void (*_controlCallback)(String pin, String value);
@@ -73,6 +107,9 @@ private:
     // 內部函式
     bool connectWiFi();
     bool reportStatus();
+    String buildUrl(const String& path);
+    bool httpGet(const String& path, int* code = nullptr, String* response = nullptr);
+    bool httpPostJson(const String& path, const String& body, int* code = nullptr, String* response = nullptr);
     void handleWebSocketEvent(WStype_t type, uint8_t* payload, size_t length);
     static void webSocketEventWrapper(WStype_t type, uint8_t* payload, size_t length);
     

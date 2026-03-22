@@ -9,8 +9,14 @@ ESP_IoT_Manager::ESP_IoT_Manager(const char* ssid, const char* password, const c
     _serverPort = serverPort;
     _lastHeartbeat = 0;
     _heartbeatInterval = 30000;  // 30 秒
+    _lastWiFiRetry = 0;
+    _wifiRetryInterval = 10000;  // 10 秒
     _controlCallback = nullptr;
     _wsConnected = false;
+    _useProvisioning = false;
+    _apNamePrefix = "ESP-IoT-Setup";
+    _apPassword = "";
+    _portalTimeoutSec = 180;
     _instance = this;
     
 #ifdef ESP32
@@ -19,6 +25,9 @@ ESP_IoT_Manager::ESP_IoT_Manager(const char* ssid, const char* password, const c
     _chipType = "ESP8266";
 #endif
 }
+
+ESP_IoT_Manager::ESP_IoT_Manager(const char* serverIP, int serverPort)
+    : ESP_IoT_Manager(nullptr, nullptr, serverIP, serverPort) {}
 
 bool ESP_IoT_Manager::begin(const char* deviceVersion) {
     Serial.begin(115200);
@@ -58,6 +67,16 @@ bool ESP_IoT_Manager::begin(const char* deviceVersion) {
 }
 
 void ESP_IoT_Manager::loop() {
+    // 維持 WiFi 連線（非阻塞）
+    if (WiFi.status() != WL_CONNECTED) {
+        if (millis() - _lastWiFiRetry > _wifiRetryInterval) {
+            _lastWiFiRetry = millis();
+            Serial.println("[WiFi] Disconnected, retrying...");
+            WiFi.reconnect();
+        }
+        return;
+    }
+
     // 處理 WebSocket
     _webSocket.loop();
     
@@ -68,17 +87,75 @@ void ESP_IoT_Manager::loop() {
     }
 }
 
+void ESP_IoT_Manager::enableProvisioning(
+    bool enable,
+    const char* apNamePrefix,
+    const char* apPassword,
+    uint16_t portalTimeoutSec
+) {
+    _useProvisioning = enable;
+    _apNamePrefix = apNamePrefix ? apNamePrefix : "ESP-IoT-Setup";
+    _apPassword = apPassword ? apPassword : "";
+    _portalTimeoutSec = portalTimeoutSec;
+}
+
+void ESP_IoT_Manager::setWiFiCredentials(const char* ssid, const char* password) {
+    _ssid = ssid;
+    _password = password;
+}
+
+void ESP_IoT_Manager::clearWiFiCredentials() {
+    WiFiManager wm;
+    wm.resetSettings();
+    Serial.println("[WiFi] Cleared saved WiFi settings");
+}
+
 bool ESP_IoT_Manager::connectWiFi() {
+    WiFi.mode(WIFI_STA);
+
+    if (_useProvisioning) {
+        WiFiManager wm;
+        wm.setConfigPortalTimeout(_portalTimeoutSec);
+
+        String apName = _apNamePrefix;
+        String mac = WiFi.macAddress();
+        mac.replace(":", "");
+        if (mac.length() >= 4) {
+            apName += "-" + mac.substring(mac.length() - 4);
+        }
+
+        Serial.printf("[WiFi] Starting provisioning portal: %s\n", apName.c_str());
+        bool connected = false;
+        if (_apPassword.length() >= 8) {
+            connected = wm.autoConnect(apName.c_str(), _apPassword.c_str());
+        } else {
+            connected = wm.autoConnect(apName.c_str());
+        }
+
+        if (connected && WiFi.status() == WL_CONNECTED) {
+            Serial.println("[WiFi] Provisioning success");
+            return true;
+        }
+
+        Serial.println("[WiFi] Provisioning timeout or failed");
+        return false;
+    }
+
+    if (_ssid == nullptr || _ssid[0] == '\0') {
+        Serial.println("[WiFi] SSID is empty and provisioning is disabled");
+        return false;
+    }
+
     Serial.printf("Connecting to %s...", _ssid);
     WiFi.begin(_ssid, _password);
-    
+
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
         delay(500);
         Serial.print(".");
         attempts++;
     }
-    
+
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println(" Connected!");
         return true;
@@ -92,19 +169,7 @@ bool ESP_IoT_Manager::reportStatus() {
     if (WiFi.status() != WL_CONNECTED) {
         return false;
     }
-    
-    HTTPClient http;
-    String url = "http://" + String(_serverIP) + ":" + String(_serverPort) + "/api/update_status";
-    
-#ifdef ESP32
-    http.begin(url);
-#else
-    WiFiClient client;
-    http.begin(client, url);
-#endif
-    
-    http.addHeader("Content-Type", "application/json");
-    
+
     StaticJsonDocument<256> doc;
     doc["mac"] = _macAddress;
     doc["ip"] = WiFi.localIP().toString();
@@ -113,56 +178,43 @@ bool ESP_IoT_Manager::reportStatus() {
     
     String payload;
     serializeJson(doc, payload);
-    
-    int httpCode = http.POST(payload);
-    bool success = (httpCode > 0);
-    
+
+    int httpCode = 0;
+    bool success = httpPostJson("/api/update_status", payload, &httpCode, nullptr);
+
     if (success) {
         Serial.printf("[HTTP] Status reported (Code: %d)\n", httpCode);
     } else {
         Serial.printf("[HTTP] Failed (Code: %d)\n", httpCode);
     }
-    
-    http.end();
     return success;
 }
 
 // Blynk 相容 API - 發送數據
 bool ESP_IoT_Manager::sendData(const char* pin, float value) {
-    return sendData(pin, String(value, 2).c_str());
+    String val = String(value, 2);
+    return sendData(pin, val.c_str());
 }
 
 bool ESP_IoT_Manager::sendData(const char* pin, int value) {
-    return sendData(pin, String(value).c_str());
+    String val = String(value);
+    return sendData(pin, val.c_str());
 }
 
 bool ESP_IoT_Manager::sendData(const char* pin, const char* value) {
     if (WiFi.status() != WL_CONNECTED) {
         return false;
     }
-    
-    HTTPClient http;
-    String url = "http://" + String(_serverIP) + ":" + String(_serverPort) + 
-                 "/blynk/" + _macAddress + "/update/" + String(pin) + 
-                 "?value=" + String(value);
-    
-#ifdef ESP32
-    http.begin(url);
-#else
-    WiFiClient client;
-    http.begin(client, url);
-#endif
-    
-    int httpCode = http.GET();
-    bool success = (httpCode == 200);
-    
+
+    String path = "/blynk/" + _macAddress + "/update/" + String(pin) + "?value=" + String(value);
+    int httpCode = 0;
+    bool success = httpGet(path, &httpCode, nullptr);
+
     if (success) {
         Serial.printf("[DATA] Sent %s=%s\n", pin, value);
     } else {
         Serial.printf("[DATA] Failed to send %s (Code: %d)\n", pin, httpCode);
     }
-    
-    http.end();
     return success;
 }
 
@@ -170,27 +222,51 @@ bool ESP_IoT_Manager::sendMultiple(const char* pins[], const char* values[], int
     if (WiFi.status() != WL_CONNECTED) {
         return false;
     }
-    
-    HTTPClient http;
-    String url = "http://" + String(_serverIP) + ":" + String(_serverPort) + 
-                 "/blynk/" + _macAddress + "/update?";
-    
+
+    String path = "/blynk/" + _macAddress + "/update?";
+
     for (int i = 0; i < count; i++) {
-        if (i > 0) url += "&";
-        url += String(pins[i]) + "=" + String(values[i]);
+        if (i > 0) path += "&";
+        path += String(pins[i]) + "=" + String(values[i]);
     }
-    
-#ifdef ESP32
-    http.begin(url);
-#else
-    WiFiClient client;
-    http.begin(client, url);
-#endif
-    
-    int httpCode = http.GET();
-    bool success = (httpCode == 200);
-    
-    http.end();
+
+    int httpCode = 0;
+    return httpGet(path, &httpCode, nullptr);
+}
+
+bool ESP_IoT_Manager::registerDatastream(
+    const char* pin,
+    const char* name,
+    float minValue,
+    float maxValue,
+    const char* unit,
+    const char* dataType
+) {
+    if (WiFi.status() != WL_CONNECTED) {
+        return false;
+    }
+
+    StaticJsonDocument<320> doc;
+    doc["device_mac"] = _macAddress;
+    doc["pin"] = pin;
+    doc["name"] = name;
+    doc["data_type"] = dataType;
+    doc["min"] = minValue;
+    doc["max"] = maxValue;
+    doc["unit"] = unit;
+
+    String payload;
+    serializeJson(doc, payload);
+
+    int httpCode = 0;
+    bool success = httpPostJson("/blynk/admin/datastream", payload, &httpCode, nullptr);
+
+    if (success) {
+        Serial.printf("[DATASTREAM] Registered %s (%s)\n", name, pin);
+    } else {
+        Serial.printf("[DATASTREAM] Failed %s (Code: %d)\n", pin, httpCode);
+    }
+
     return success;
 }
 
@@ -231,7 +307,7 @@ void ESP_IoT_Manager::handleWebSocketEvent(WStype_t type, uint8_t* payload, size
 }
 
 void ESP_IoT_Manager::checkOTA() {
-    String url = "http://" + String(_serverIP) + ":" + String(_serverPort) + "/api/ota/firmware.bin";
+    String url = buildUrl("/api/ota/firmware.bin");
     Serial.printf("[OTA] Checking update from %s\n", url.c_str());
     
 #ifdef ESP32
@@ -252,6 +328,61 @@ void ESP_IoT_Manager::checkOTA() {
             Serial.println("[OTA] Update successful, rebooting...");
             break;
     }
+}
+
+String ESP_IoT_Manager::buildUrl(const String& path) {
+    return "http://" + String(_serverIP) + ":" + String(_serverPort) + path;
+}
+
+bool ESP_IoT_Manager::httpGet(const String& path, int* code, String* response) {
+    HTTPClient http;
+    String url = buildUrl(path);
+
+#ifdef ESP32
+    http.begin(url);
+#else
+    WiFiClient client;
+    http.begin(client, url);
+#endif
+
+    http.setTimeout(5000);
+    int httpCode = http.GET();
+
+    if (response != nullptr && httpCode > 0) {
+        *response = http.getString();
+    }
+    if (code != nullptr) {
+        *code = httpCode;
+    }
+
+    http.end();
+    return httpCode >= 200 && httpCode < 300;
+}
+
+bool ESP_IoT_Manager::httpPostJson(const String& path, const String& body, int* code, String* response) {
+    HTTPClient http;
+    String url = buildUrl(path);
+
+#ifdef ESP32
+    http.begin(url);
+#else
+    WiFiClient client;
+    http.begin(client, url);
+#endif
+
+    http.setTimeout(5000);
+    http.addHeader("Content-Type", "application/json");
+    int httpCode = http.POST(body);
+
+    if (response != nullptr && httpCode > 0) {
+        *response = http.getString();
+    }
+    if (code != nullptr) {
+        *code = httpCode;
+    }
+
+    http.end();
+    return httpCode >= 200 && httpCode < 300;
 }
 
 bool ESP_IoT_Manager::isConnected() {

@@ -5,6 +5,7 @@
 ## 功能特色
 
 - ✅ **自動 WiFi 連線管理**
+- ✅ **手機引導配網（Captive Portal）**
 - ✅ **Virtual Pin 數據傳輸**（Blynk 相容）
 - ✅ **WebSocket 即時雙向通訊**
 - ✅ **OTA 無線更新**
@@ -30,6 +31,7 @@
 請先安裝以下函式庫（透過 Arduino Library Manager）：
 - `ArduinoJson` (v6.x)
 - `WebSockets` by Markus Sattler
+- `WiFiManager` by tzapu
 
 ## 快速開始
 
@@ -53,6 +55,32 @@ void loop() {
   
   delay(10000);
 }
+```
+
+### 免硬編碼 WiFi（推薦）
+
+```cpp
+#include <ESP_IoT_Manager.h>
+
+ESP_IoT_Manager iot("192.168.1.100", 5000);  // 不需要在程式內寫死 WiFi
+
+void setup() {
+  // 第一次上電時，設備會開 AP：ESP-IoT-Setup-XXXX
+  // 使用手機連上後，進入 Captive Portal 輸入家用 WiFi 帳密
+  iot.enableProvisioning(true, "ESP-IoT-Setup", "", 180);
+
+  iot.begin("1.1.0");
+}
+
+void loop() {
+  iot.loop();
+}
+```
+
+重置已儲存 WiFi：
+
+```cpp
+iot.clearWiFiCredentials();
 ```
 
 ### 即時控制範例
@@ -96,6 +124,7 @@ bool begin(version)  // 連接 WiFi 並初始化
 ```cpp
 bool sendData(pin, value)           // 發送單一數據
 bool sendMultiple(pins[], values[], count)  // 批量發送
+bool registerDatastream(pin, name, min, max, unit, dataType)  // 註冊 Datastream
 ```
 
 支援的數據類型：`float`, `int`, `const char*`
@@ -111,6 +140,8 @@ void onControlMessage(callback)  // 註冊接收指令的回調函式
 
 ```cpp
 void checkOTA()  // 手動觸發 OTA 檢查
+void enableProvisioning(enable, apNamePrefix, apPassword, portalTimeoutSec)
+void clearWiFiCredentials()
 ```
 
 ### 工具函式

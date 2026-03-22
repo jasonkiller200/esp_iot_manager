@@ -10,22 +10,21 @@
  * 板子設定：ESP32 Dev Module
  */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
+#include <ESP_IoT_Manager.h>
 
 // ==================== 設定區 ====================
-// WiFi 設定
-const char* ssid = "YOUR_WIFI_SSID";          // 修改為你的 WiFi 名稱
-const char* password = "YOUR_WIFI_PASSWORD";  // 修改為你的 WiFi 密碼
-
 // 伺服器設定
-const char* serverUrl = "http://192.168.1.100:5000";  // 修改為你的伺服器 IP
+const char* serverIP = "192.168.1.100";  // 修改為你的伺服器 IP
+const int serverPort = 5000;
 
 // 發送間隔 (毫秒)
 const unsigned long sendInterval = 5000;  // 每 5 秒發送一次
 // ================================================
 
 String deviceMAC = "";  // 將自動取得 MAC 地址
+
+// 由函式庫處理連線與 API 傳輸
+ESP_IoT_Manager iot(serverIP, serverPort);
 
 // 感測器定義（虛擬）- ESP32 使用不同的虛擬腳位
 struct Sensor {
@@ -47,6 +46,10 @@ Sensor sensors[] = {
 const int sensorCount = 5;
 unsigned long lastSendTime = 0;
 
+const char* pins[sensorCount] = {"V5", "V6", "V7", "V8", "V9"};
+String values[sensorCount];
+const char* valuePtrs[sensorCount];
+
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -57,15 +60,14 @@ void setup() {
   Serial.println("  裝置類型: ESP32");
   Serial.println("=====================================");
   
-  // 取得 MAC 地址
-  deviceMAC = WiFi.macAddress();
-  Serial.println("MAC 地址: " + deviceMAC);
-  
-  // 連接 WiFi
-  connectWiFi();
-  
-  // 創建 DataStream 定義
-  if (WiFi.status() == WL_CONNECTED) {
+  // 啟用手機引導配網（Captive Portal）
+  // 第一次使用時，請用手機連接 ESP-IoT-Setup-XXXX，開啟彈出頁設定 WiFi
+  iot.enableProvisioning(true, "ESP-IoT-Setup", "", 180);
+
+  // 初始化（含 WiFi 連線、心跳、WebSocket）
+  if (iot.begin("1.1.0")) {
+    deviceMAC = iot.getMacAddress();
+    Serial.println("MAC 地址: " + deviceMAC);
     createDataStreams();
     Serial.println("\n✅ 初始化完成！");
     Serial.println("開始發送模擬數據...\n");
@@ -75,11 +77,10 @@ void setup() {
 }
 
 void loop() {
-  // 檢查 WiFi 連接
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("⚠️  WiFi 斷線，重新連接...");
-    connectWiFi();
-    delay(5000);
+  iot.loop();
+
+  if (!iot.isConnected()) {
+    delay(500);
     return;
   }
   
@@ -92,59 +93,24 @@ void loop() {
   delay(100);
 }
 
-void connectWiFi() {
-  Serial.println("\n📡 連接 WiFi: " + String(ssid));
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
-  Serial.println();
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("✅ WiFi 連接成功！");
-    Serial.println("   IP 地址: " + WiFi.localIP().toString());
-    Serial.println("   信號強度: " + String(WiFi.RSSI()) + " dBm");
-  } else {
-    Serial.println("❌ WiFi 連接失敗！");
-    Serial.println("   請檢查 SSID 和密碼是否正確");
-  }
-}
-
 void createDataStreams() {
   Serial.println("\n📝 創建 DataStream 定義...");
-  
-  HTTPClient http;
-  String url = String(serverUrl) + "/blynk/admin/datastream";
-  
+
   for (int i = 0; i < sensorCount; i++) {
-    http.begin(url);
-    http.addHeader("Content-Type", "application/json");
-    
-    String jsonData = "{";
-    jsonData += "\"device_mac\":\"" + deviceMAC + "\",";
-    jsonData += "\"pin\":\"" + sensors[i].pin + "\",";
-    jsonData += "\"name\":\"ESP32-" + sensors[i].name + "\",";
-    jsonData += "\"data_type\":\"double\",";
-    jsonData += "\"min\":" + String(sensors[i].minValue, 1) + ",";
-    jsonData += "\"max\":" + String(sensors[i].maxValue, 1) + ",";
-    jsonData += "\"unit\":\"" + sensors[i].unit + "\"";
-    jsonData += "}";
-    
-    int httpCode = http.POST(jsonData);
-    
-    if (httpCode > 0) {
+    bool success = iot.registerDatastream(
+      sensors[i].pin.c_str(),
+      ("ESP32-" + sensors[i].name).c_str(),
+      sensors[i].minValue,
+      sensors[i].maxValue,
+      sensors[i].unit.c_str()
+    );
+
+    if (success) {
       Serial.println("   ✅ " + sensors[i].name + " (" + sensors[i].pin + ")");
     } else {
-      Serial.println("   ⚠️  " + sensors[i].name + " - HTTP " + String(httpCode));
+      Serial.println("   ⚠️  " + sensors[i].name + " - 註冊失敗");
     }
-    
-    http.end();
+
     delay(100);
   }
 }
@@ -154,7 +120,7 @@ void sendAllSensorData() {
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   Serial.println("📊 [" + String(startTime / 1000) + "s] ESP32 發送數據：");
   
-  int successCount = 0;
+  int valueCount = 0;
   
   for (int i = 0; i < sensorCount; i++) {
     float value;
@@ -169,42 +135,30 @@ void sendAllSensorData() {
               (sensors[i].maxValue - sensors[i].minValue);
     }
     
-    // 發送到伺服器
-    bool success = sendData(sensors[i].pin, value);
-    
-    if (success) {
-      Serial.print("   ✅ ");
-      successCount++;
-    } else {
-      Serial.print("   ❌ ");
-    }
+    // 暫存數值，稍後批次發送
+    values[i] = String(value, 2);
+    valuePtrs[i] = values[i].c_str();
+    valueCount++;
+    Serial.print("   • ");
     
     Serial.print(sensors[i].name);
     Serial.print(": ");
     Serial.print(value, 2);
     Serial.println(" " + sensors[i].unit);
     
-    delay(50);  // 避免請求過快
+    delay(20);
+  }
+
+  // 批次送出，降低 HTTP request 次數
+  bool batchSuccess = iot.sendMultiple(pins, valuePtrs, sensorCount);
+  if (!batchSuccess) {
+    Serial.println("⚠️  批次發送失敗");
   }
   
   unsigned long elapsed = millis() - startTime;
   Serial.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  Serial.println("✓ 成功: " + String(successCount) + "/" + String(sensorCount) + 
+  int uploadCount = batchSuccess ? sensorCount : 0;
+  Serial.println("✓ 生成: " + String(valueCount) + "/" + String(sensorCount) +
+                 " | 上傳: " + String(uploadCount) + "/" + String(sensorCount) +
                  " | 耗時: " + String(elapsed) + "ms\n");
-}
-
-bool sendData(String pin, float value) {
-  if (WiFi.status() != WL_CONNECTED) {
-    return false;
-  }
-  
-  HTTPClient http;
-  String url = String(serverUrl) + "/blynk/" + deviceMAC + "/update/" + pin + "?value=" + String(value, 2);
-  
-  http.begin(url);
-  http.setTimeout(5000);  // 5 秒超時
-  int httpCode = http.GET();
-  http.end();
-  
-  return (httpCode == 200);
 }
