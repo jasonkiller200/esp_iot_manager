@@ -200,6 +200,31 @@
 
     <div class="app-card mb-3">
         <div class="app-card-header">
+            <strong><i class="bi bi-list-check"></i> 命令追蹤</strong>
+            <button class="btn btn-sm btn-outline-primary" id="refreshCommandsBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+        </div>
+        <div class="app-card-body">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>命令</th>
+                            <th>值</th>
+                            <th>狀態</th>
+                            <th>回應</th>
+                        </tr>
+                    </thead>
+                    <tbody id="commandsTableBody">
+                        <tr><td colspan="5" class="text-muted">尚無命令紀錄</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-card mb-3">
+        <div class="app-card-header">
             <strong><i class="bi bi-speedometer"></i> 即時數據</strong>
             <button class="btn btn-sm btn-outline-primary" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
         </div>
@@ -467,7 +492,8 @@ function sendControlCommand() {
             setControlResult(`發送失敗：${data.message || '未知錯誤'}`, 'error');
             return;
         }
-        setControlResult(`已發送控制：${pin} = ${value}`, 'success');
+        setControlResult(`已發送控制：${pin} = ${value}（命令ID: ${data.command_id || 'N/A'}）`, 'success');
+        refreshCommands();
     })
     .catch(err => {
         setControlResult(`發送失敗：${err.message}`, 'error');
@@ -487,7 +513,8 @@ function rebootDevice() {
             setControlResult(`重啟命令失敗：${data.message || '未知錯誤'}`, 'error');
             return;
         }
-        setControlResult('重啟命令已送出', 'success');
+        setControlResult(`重啟命令已送出（命令ID: ${data.command_id || 'N/A'}）`, 'success');
+        refreshCommands();
     })
     .catch(err => {
         setControlResult(`重啟命令失敗：${err.message}`, 'error');
@@ -529,6 +556,44 @@ function saveDsSettings() {
     });
 }
 
+function renderCommandStatus(status) {
+    if (status === 'ack') return '<span class="badge bg-success">ACK</span>';
+    if (status === 'failed') return '<span class="badge bg-danger">FAILED</span>';
+    if (status === 'timeout') return '<span class="badge bg-warning text-dark">TIMEOUT</span>';
+    if (status === 'sent') return '<span class="badge bg-primary">SENT</span>';
+    return `<span class="badge bg-secondary">${status || 'queued'}</span>`;
+}
+
+function refreshCommands() {
+    fetch(`/dashboard/device/${deviceMac}/commands?limit=20`)
+        .then(res => res.json())
+        .then(rows => {
+            const tbody = document.getElementById('commandsTableBody');
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">尚無命令紀錄</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = rows.map(r => {
+                const time = r.created_at ? new Date(r.created_at).toLocaleString('zh-TW') : '--';
+                const cmd = r.command_type === 'reboot' ? 'system/reboot' : `${r.pin || ''}`;
+                const resp = r.ack_message || r.error_message || '--';
+                return `
+                    <tr>
+                        <td>${time}</td>
+                        <td><code>${cmd}</code></td>
+                        <td>${r.value || '--'}</td>
+                        <td>${renderCommandStatus(r.status)}</td>
+                        <td>${resp}</td>
+                    </tr>
+                `;
+            }).join('');
+        })
+        .catch(err => {
+            console.error('refreshCommands error', err);
+        });
+}
+
 socket.on('connect', () => {
     updateConnectionStatus('connected');
     socket.emit('subscribe_device', { device_mac: deviceMac });
@@ -567,6 +632,7 @@ document.getElementById('resetViewBtn').addEventListener('click', resetViewConfi
 document.getElementById('refreshBtn').addEventListener('click', refreshAllData);
 document.getElementById('sendControlBtn').addEventListener('click', sendControlCommand);
 document.getElementById('rebootBtn').addEventListener('click', rebootDevice);
+document.getElementById('refreshCommandsBtn').addEventListener('click', refreshCommands);
 document.getElementById('deviceSwitch').addEventListener('change', (e) => {
     const mac = e.target.value;
     if (mac !== deviceMac) window.location.href = `/dashboard/device/${mac}`;
@@ -582,6 +648,8 @@ document.querySelectorAll('.ds-widget-type').forEach((sel) => {
 applyViewConfig(DashboardPrefs.load(PREF_KEY, { defaultWidgetStyle: 'line', sourceType: 'auto', timeRange: 24, perPinWidget: {} }));
 reloadAllCharts();
 refreshAllData();
+refreshCommands();
 setInterval(refreshAllData, 10000);
+setInterval(refreshCommands, 5000);
 </script>
 {% endblock %}

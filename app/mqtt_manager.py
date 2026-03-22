@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 from app import db
 from app.models.device import Device
 from app.models.datastream import DataStream, DataPoint
+from app.models.command import DeviceCommand
 
 TAIPEI_TZ = timezone(timedelta(hours=8))
 logger = logging.getLogger(__name__)
@@ -264,6 +265,12 @@ class MQTTManager:
                     except Exception as e:
                         logger.error(f"Failed to broadcast device status: {e}")
 
+                    # command ACK lifecycle 更新
+                    try:
+                        self._update_command_ack(mac_address, status)
+                    except Exception as e:
+                        logger.error(f"Failed to update command ack: {e}")
+
             except json.JSONDecodeError:
                 logger.error(f"Invalid JSON in status message: {payload}")
             except Exception as e:
@@ -296,6 +303,41 @@ class MQTTManager:
         """發送控制指令到設備"""
         topic = f"devices/{mac_address}/control/{pin}"
         return self.publish(topic, str(value), qos=1)
+
+    def _update_command_ack(self, mac_address, status_payload):
+        event = status_payload.get("event")
+        if not event:
+            return
+
+        message = status_payload.get("message", "")
+        cmd_id = status_payload.get("command_id")
+
+        query = DeviceCommand.query.filter_by(device_mac=mac_address)
+        if cmd_id:
+            command = query.filter_by(command_id=cmd_id).first()
+        else:
+            command = (
+                query.filter(DeviceCommand.status.in_(["queued", "sent"]))
+                .order_by(DeviceCommand.created_at.desc())
+                .first()
+            )
+
+        if not command:
+            return
+
+        command.ack_event = str(event)
+        command.ack_message = str(message)
+        command.ack_at = datetime.now(TAIPEI_TZ)
+
+        if event in ["ok", "connected", "reboot"]:
+            command.status = "ack"
+        elif event in ["error", "warn"]:
+            command.status = "failed"
+            command.error_message = message
+        else:
+            command.status = "ack"
+
+        db.session.commit()
 
     def disconnect(self):
         """斷開 MQTT 連線"""

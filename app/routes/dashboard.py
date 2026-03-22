@@ -5,6 +5,7 @@ from app.mqtt_manager import mqtt_manager
 from app.auth import require_write_token
 from app.models.device import Device
 from app.models.datastream import DataStream, DataPoint, HourlyAggregate
+from app.models.command import DeviceCommand
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
 import json
@@ -382,14 +383,35 @@ def control_device(device_mac):
             503,
         )
 
+    command_id = DeviceCommand.new_command_id()
+    command = DeviceCommand(
+        command_id=command_id,
+        device_mac=device.mac,
+        command_type="control",
+        pin=pin,
+        value=str(value),
+        status="queued",
+    )
+    db.session.add(command)
+    db.session.commit()
+
     ok = mqtt_manager.send_control_command(device.mac, pin, value)
     if not ok:
+        command.status = "failed"
+        command.error_message = "failed to publish command"
+        db.session.commit()
         return jsonify({"status": "error", "message": "failed to publish command"}), 500
+
+    command.status = "sent"
+    command.sent_at = datetime.now(TAIPEI_TZ)
+    command.timeout_at = datetime.now(TAIPEI_TZ) + timedelta(seconds=20)
+    db.session.commit()
 
     return jsonify(
         {
             "status": "ok",
             "message": "command sent",
+            "command_id": command.command_id,
             "topic": f"devices/{device.mac}/control/{pin}",
             "pin": pin,
             "value": value,
@@ -410,24 +432,71 @@ def reboot_device(device_mac):
         )
 
     topic = f"devices/{device.mac}/control/system"
+    command_id = DeviceCommand.new_command_id()
+
+    command = DeviceCommand(
+        command_id=command_id,
+        device_mac=device.mac,
+        command_type="reboot",
+        pin="system",
+        value="reboot",
+        status="queued",
+    )
+    db.session.add(command)
+    db.session.commit()
+
     payload = json.dumps(
         {
             "action": "reboot",
+            "command_id": command_id,
             "requested_at": datetime.now(TAIPEI_TZ).isoformat(),
         }
     )
 
     ok = mqtt_manager.publish(topic, payload, qos=1)
     if not ok:
+        command.status = "failed"
+        command.error_message = "failed to publish reboot"
+        db.session.commit()
         return jsonify({"status": "error", "message": "failed to publish reboot"}), 500
+
+    command.status = "sent"
+    command.sent_at = datetime.now(TAIPEI_TZ)
+    command.timeout_at = datetime.now(TAIPEI_TZ) + timedelta(seconds=20)
+    db.session.commit()
 
     return jsonify(
         {
             "status": "ok",
             "message": "reboot command sent",
+            "command_id": command.command_id,
             "topic": topic,
         }
     )
+
+
+@dashboard_bp.route("/device/<device_mac>/commands", methods=["GET"])
+def list_device_commands(device_mac):
+    """列出設備命令 lifecycle"""
+    limit = min(100, int(request.args.get("limit", 20)))
+    rows = (
+        DeviceCommand.query.filter_by(device_mac=device_mac)
+        .order_by(DeviceCommand.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    # 逾時命令標記
+    now = datetime.now(TAIPEI_TZ)
+    changed = 0
+    for row in rows:
+        if row.status in ["queued", "sent"] and row.timeout_at and row.timeout_at < now:
+            row.status = "timeout"
+            changed += 1
+    if changed:
+        db.session.commit()
+
+    return jsonify([r.to_dict() for r in rows])
 
 
 @dashboard_bp.route("/live")
