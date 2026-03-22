@@ -1,5 +1,5 @@
 from functools import wraps
-from flask import current_app, request, jsonify
+from flask import current_app, request, jsonify, flash, redirect, url_for
 
 
 def _get_bearer_token():
@@ -26,7 +26,10 @@ def require_write_token():
                 or request.form.get("write_token", "")
             )
             if provided != required:
-                return jsonify({"error": "unauthorized"}), 401
+                if not request.is_json:
+                    flash("未授權：請先設定 WRITE_API_TOKEN", "danger")
+                    return redirect(request.referrer or url_for("main.index"))
+                return jsonify({"status": "error", "message": "unauthorized"}), 401
 
             return fn(*args, **kwargs)
 

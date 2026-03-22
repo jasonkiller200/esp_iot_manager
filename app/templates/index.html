@@ -207,5 +207,11 @@ if (current) {
     document.getElementById('writeTokenInput').value = current;
 }
 syncWriteTokenFields();
+
+document.querySelectorAll('form').forEach((form) => {
+    form.addEventListener('submit', () => {
+        syncWriteTokenFields();
+    });
+});
 </script>
 {% endblock %}

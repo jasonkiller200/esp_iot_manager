@@ -17,3 +17,13 @@ class Config:
     MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
     MQTT_USERNAME = os.getenv("MQTT_USERNAME")
     MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+
+    @classmethod
+    def validate_security(cls):
+        warnings = []
+        if cls.ENV == "production":
+            if not cls.SECRET_KEY or cls.SECRET_KEY == "change-this-in-production":
+                warnings.append("SECRET_KEY is not set securely for production")
+            if not cls.WRITE_API_TOKEN:
+                warnings.append("WRITE_API_TOKEN is empty in production")
+        return warnings

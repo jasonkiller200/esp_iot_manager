@@ -186,6 +186,10 @@ function saveDeviceName() {
     })
     .then(res => res.json())
     .then(data => {
+        if (data.status === 'error') {
+            alert(`操作失敗：${data.message || '未授權或請求錯誤'}`);
+            return;
+        }
         if (data.status === 'ok') {
             const el = document.getElementById(`name-${mac}`);
             if (el) el.textContent = data.name || mac;
@@ -202,6 +206,10 @@ function deleteDevice(mac) {
     })
     .then(res => res.json())
     .then(data => {
+        if (data.status === 'error') {
+            alert(`刪除失敗：${data.message || '未授權或請求錯誤'}`);
+            return;
+        }
         if (data.status === 'ok') {
             const node = document.querySelector(`.device-card[data-mac="${mac}"]`);
             if (node) node.remove();

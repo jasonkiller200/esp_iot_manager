@@ -3,21 +3,28 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_socketio import SocketIO
 from config import Config
+import logging
 
 db = SQLAlchemy()
 migrate = Migrate()
 socketio = SocketIO()
 
+
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    logger = logging.getLogger(__name__)
+    for warning in config_class.validate_security():
+        logger.warning("[SECURITY] %s", warning)
+
     db.init_app(app)
     migrate.init_app(app, db)
-    socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
+    socketio.init_app(app, cors_allowed_origins="*", async_mode="threading")
 
     # 初始化 MQTT Manager
     from app.mqtt_manager import mqtt_manager
+
     mqtt_manager.init_app(app)
 
     # 註冊 Blueprints (C: Controllers)
@@ -25,10 +32,10 @@ def create_app(config_class=Config):
     from app.routes.api import api_bp
     from app.routes.blynk_api import blynk_bp
     from app.routes.dashboard import dashboard_bp
-    
+
     app.register_blueprint(main_bp)
-    app.register_blueprint(api_bp, url_prefix='/api')
-    app.register_blueprint(blynk_bp, url_prefix='/blynk')
-    app.register_blueprint(dashboard_bp, url_prefix='/dashboard')
+    app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(blynk_bp, url_prefix="/blynk")
+    app.register_blueprint(dashboard_bp, url_prefix="/dashboard")
 
     return app
