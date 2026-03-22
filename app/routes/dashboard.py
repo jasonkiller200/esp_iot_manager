@@ -3,7 +3,7 @@ from flask_socketio import emit
 from app import db, socketio
 from app.mqtt_manager import mqtt_manager
 from app.models.device import Device
-from app.models.datastream import DataStream, DataPoint
+from app.models.datastream import DataStream, DataPoint, HourlyAggregate
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
 import json
@@ -152,6 +152,32 @@ def api_device_data(device_mac, pin):
     bucket_minutes = max(1, int(request.args.get("bucket_minutes", 5)))
 
     cutoff = datetime.now(TAIPEI_TZ) - timedelta(hours=hours)
+
+    if source == "hourly":
+        rows = (
+            HourlyAggregate.query.filter(
+                HourlyAggregate.device_mac == device_mac,
+                HourlyAggregate.pin == pin,
+                HourlyAggregate.hour_bucket >= cutoff,
+            )
+            .order_by(HourlyAggregate.hour_bucket.asc())
+            .limit(limit)
+            .all()
+        )
+
+        result = []
+        for row in rows:
+            result.append(
+                {
+                    "timestamp": row.hour_bucket.isoformat(),
+                    "value": row.avg_value,
+                    "count": row.count,
+                    "min": row.min_value,
+                    "max": row.max_value,
+                    "last": row.last_value,
+                }
+            )
+        return jsonify(result)
 
     data_points = (
         DataPoint.query.filter(
