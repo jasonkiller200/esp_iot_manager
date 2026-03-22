@@ -66,3 +66,11 @@ App 啟動時會檢查以下項目並記錄 warning：
 - `MQTT_FLUSH_INTERVAL_SEC`（預設 2 秒）
 
 目的：降低每筆資料即時 commit 帶來的資料庫壓力。
+
+## 7) 控制命令白名單
+
+可用環境變數限制可操作的控制 pin：
+
+- `CONTROL_PIN_WHITELIST=V10,V11,system`
+
+若設定後，非白名單 pin 會被 API 拒絕。

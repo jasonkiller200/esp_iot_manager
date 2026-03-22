@@ -209,6 +209,7 @@
                     <thead>
                         <tr>
                             <th>時間</th>
+                            <th>操作者</th>
                             <th>命令</th>
                             <th>值</th>
                             <th>狀態</th>
@@ -216,7 +217,7 @@
                         </tr>
                     </thead>
                     <tbody id="commandsTableBody">
-                        <tr><td colspan="5" class="text-muted">尚無命令紀錄</td></tr>
+                        <tr><td colspan="6" class="text-muted">尚無命令紀錄</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -570,7 +571,7 @@ function refreshCommands() {
         .then(rows => {
             const tbody = document.getElementById('commandsTableBody');
             if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-muted">尚無命令紀錄</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted">尚無命令紀錄</td></tr>';
                 return;
             }
 
@@ -581,6 +582,7 @@ function refreshCommands() {
                 return `
                     <tr>
                         <td>${time}</td>
+                        <td>${r.requested_by || '--'}</td>
                         <td><code>${cmd}</code></td>
                         <td>${r.value || '--'}</td>
                         <td>${renderCommandStatus(r.status)}</td>

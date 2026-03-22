@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, current_app
 from flask_socketio import emit
 from app import db, socketio
 from app.mqtt_manager import mqtt_manager
@@ -9,10 +9,41 @@ from app.models.command import DeviceCommand
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import func
 import json
+import re
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
 TAIPEI_TZ = timezone(timedelta(hours=8))
+
+
+def _request_actor():
+    actor = request.headers.get("X-Actor")
+    if actor:
+        return actor[:64]
+    return "api_token"
+
+
+def _pin_whitelist():
+    raw = current_app.config.get("CONTROL_PIN_WHITELIST", "")
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+
+def _validate_pin(pin):
+    if not pin:
+        return False
+    return re.match(r"^[A-Za-z0-9_\-]{1,20}$", pin) is not None
+
+
+def _validate_control_value(value):
+    text = str(value)
+    if len(text) > 32:
+        return False
+    # 允許數字、ON/OFF/HIGH/LOW/true/false
+    if re.match(r"^-?\d+(\.\d+)?$", text):
+        return True
+    if text.upper() in {"ON", "OFF", "HIGH", "LOW", "TRUE", "FALSE"}:
+        return True
+    return False
 
 
 @dashboard_bp.route("/")
@@ -377,6 +408,16 @@ def control_device(device_mac):
     if value is None:
         return jsonify({"status": "error", "message": "value is required"}), 400
 
+    if not _validate_pin(pin):
+        return jsonify({"status": "error", "message": "invalid pin"}), 400
+
+    if not _validate_control_value(value):
+        return jsonify({"status": "error", "message": "invalid control value"}), 400
+
+    whitelist = _pin_whitelist()
+    if whitelist and pin not in whitelist:
+        return jsonify({"status": "error", "message": "pin is not allowed"}), 403
+
     if not mqtt_manager.connected:
         return (
             jsonify({"status": "error", "message": "MQTT broker not connected"}),
@@ -384,14 +425,14 @@ def control_device(device_mac):
         )
 
     command_id = DeviceCommand.new_command_id()
-    command = DeviceCommand(
-        command_id=command_id,
-        device_mac=device.mac,
-        command_type="control",
-        pin=pin,
-        value=str(value),
-        status="queued",
-    )
+    command = DeviceCommand()
+    command.command_id = command_id
+    command.device_mac = device.mac
+    command.command_type = "control"
+    command.pin = pin
+    command.value = str(value)
+    command.status = "queued"
+    command.requested_by = _request_actor()
     db.session.add(command)
     db.session.commit()
 
@@ -431,17 +472,23 @@ def reboot_device(device_mac):
             503,
         )
 
+    whitelist = _pin_whitelist()
+    if whitelist and "system" not in whitelist:
+        return jsonify(
+            {"status": "error", "message": "system control is not allowed"}
+        ), 403
+
     topic = f"devices/{device.mac}/control/system"
     command_id = DeviceCommand.new_command_id()
 
-    command = DeviceCommand(
-        command_id=command_id,
-        device_mac=device.mac,
-        command_type="reboot",
-        pin="system",
-        value="reboot",
-        status="queued",
-    )
+    command = DeviceCommand()
+    command.command_id = command_id
+    command.device_mac = device.mac
+    command.command_type = "reboot"
+    command.pin = "system"
+    command.value = "reboot"
+    command.status = "queued"
+    command.requested_by = _request_actor()
     db.session.add(command)
     db.session.commit()
 

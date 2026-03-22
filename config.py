@@ -20,6 +20,9 @@ class Config:
     MQTT_FLUSH_BATCH_SIZE = int(os.getenv("MQTT_FLUSH_BATCH_SIZE", "100"))
     MQTT_FLUSH_INTERVAL_SEC = int(os.getenv("MQTT_FLUSH_INTERVAL_SEC", "2"))
 
+    # 控制命令白名單（逗號分隔，例如 V10,V11,system）
+    CONTROL_PIN_WHITELIST = os.getenv("CONTROL_PIN_WHITELIST", "")
+
     @classmethod
     def validate_security(cls):
         warnings = []

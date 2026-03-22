@@ -2,8 +2,12 @@
 window.getWriteHeaders = function(extraHeaders) {
   const headers = Object.assign({}, extraHeaders || {});
   const token = window.localStorage.getItem('esp_write_token') || '';
+  const actor = window.localStorage.getItem('esp_actor') || '';
   if (token) {
     headers['X-API-Token'] = token;
+  }
+  if (actor) {
+    headers['X-Actor'] = actor;
   }
   return headers;
 };

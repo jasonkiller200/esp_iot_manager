@@ -48,6 +48,7 @@ class DeviceCommand(db.Model):
             "command_id": self.command_id,
             "device_mac": self.device_mac,
             "command_type": self.command_type,
+            "requested_by": self.requested_by,
             "pin": self.pin,
             "value": self.value,
             "status": self.status,
