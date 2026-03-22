@@ -105,7 +105,7 @@
 
 ---
 
-## Week 4：維運與交付基線
+## Week 4：維運交付 + 前端商轉體驗基線
 
 ### 任務
 
@@ -122,6 +122,15 @@
    - 部署手冊
    - 故障排除手冊
    - 回滾手冊
+6. 前端商轉 UI/UX 升級（Dashboard 全站）
+   - 建立 KPI 優先首頁（告警、設備健康、最近命令）
+   - 控制操作統一命令中心（替代分散按鈕）
+   - `dashboard/live` 升級為 NOC 監控牆：
+     - 告警優先排序（critical/warning/offline）
+     - 大屏模式（字級與間距放大）
+     - 最近事件側欄（離線、重啟、命令失敗）
+     - 一鍵跳轉設備詳細頁
+   - 統一 loading/empty/error/toast 狀態體驗
 
 ### 驗收標準
 
@@ -129,6 +138,8 @@
 - 有基本儀表板可看健康度與錯誤率
 - 備份檔可在演練環境成功還原
 - PR 必須通過測試才可合併
+- `dashboard/live` 在 55 吋大屏可讀、可輪播、可告警優先
+- 控制流程不再依賴 alert/confirm，改為可追蹤 toast + 命令中心
 
 ### 主要修改檔案
 
@@ -137,6 +148,11 @@
 - `tests/*`
 - `docker-compose.yml`（若新增）
 - `.github/workflows/*`（若新增）
+- `app/templates/dashboard.html`
+- `app/templates/device_detail.html`
+- `app/templates/live_dashboard.html`
+- `app/static/css/dashboard-theme.css`
+- `app/static/js/dashboard-widgets.js`
 
 ---
 

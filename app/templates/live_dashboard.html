@@ -1,24 +1,70 @@
 {% extends "base_dashboard.html" %}
 
-{% block title %}全螢幕即時監控儀表板{% endblock %}
+{% block title %}NOC 即時監控牆{% endblock %}
 
 {% block extra_head %}
 <style>
+    .noc-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .noc-kpi {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .noc-kpi-item {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.75rem;
+    }
+
+    .noc-kpi-item .label {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+
+    .noc-kpi-item .value {
+        font-size: 1.45rem;
+        font-weight: 700;
+    }
+
+    .noc-layout {
+        display: grid;
+        grid-template-columns: 2.1fr 1fr;
+        gap: 1rem;
+    }
+
     .live-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-        gap: 1rem;
+        gap: 0.75rem;
     }
 
     .device-node {
         background: var(--bg-elevated);
         border: 1px solid var(--border);
         border-radius: 12px;
-        padding: 1rem;
+        padding: 0.85rem;
+    }
+
+    .device-node.warning {
+        border-left: 5px solid #f59f00;
+    }
+
+    .device-node.critical {
+        border-left: 5px solid #e03131;
+        box-shadow: 0 0 0 1px rgba(224, 49, 49, 0.25);
     }
 
     .device-node.offline {
-        opacity: 0.65;
+        opacity: 0.68;
     }
 
     .node-title {
@@ -40,16 +86,40 @@
         background: var(--bg-panel);
         border-radius: 8px;
         padding: 0.45rem 0.65rem;
-        margin-top: 0.5rem;
+        margin-top: 0.45rem;
     }
 
     .ds-label {
-        font-size: 0.85rem;
+        font-size: 0.83rem;
         color: var(--text-secondary);
     }
 
     .ds-value {
         font-weight: 700;
+    }
+
+    .event-panel {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 0.85rem;
+        min-height: 460px;
+    }
+
+    .event-list {
+        max-height: 70vh;
+        overflow: auto;
+    }
+
+    .event-item {
+        border-bottom: 1px dashed var(--border);
+        padding: 0.5rem 0;
+        font-size: 0.9rem;
+    }
+
+    .event-time {
+        color: var(--text-secondary);
+        font-size: 0.78rem;
     }
 
     .clock {
@@ -65,16 +135,26 @@
         from { background: var(--accent-soft); }
         to { background: var(--bg-panel); }
     }
+
+    .noc-large .node-title { font-size: 1.2rem; }
+    .noc-large .node-sub { font-size: 0.95rem; }
+    .noc-large .ds-label { font-size: 0.95rem; }
+    .noc-large .ds-value { font-size: 1.1rem; }
+
+    @media (max-width: 1200px) {
+        .noc-layout { grid-template-columns: 1fr; }
+        .event-panel { min-height: 320px; }
+    }
 </style>
 {% endblock %}
 
 {% block body %}
-<div class="container app-page">
+<div class="container app-page" id="nocPage">
     <div class="app-header">
         <div>
             <a href="/dashboard" class="btn btn-sm btn-outline-secondary mb-2"><i class="bi bi-arrow-left"></i> 返回儀表板</a>
-            <h1 class="app-title">即時監控調度中心</h1>
-            <p class="app-subtitle">適合大螢幕輪播或機房監看</p>
+            <h1 class="app-title">NOC 即時監控牆</h1>
+            <p class="app-subtitle">告警優先、事件可追蹤、適合 24/7 監看</p>
         </div>
         <div class="text-end">
             <div class="clock" id="clock">00:00:00</div>
@@ -82,23 +162,73 @@
         </div>
     </div>
 
-    <div class="live-grid" id="liveGrid">
-        {% for device in devices %}
-        <div class="device-node {% if not device.is_online() %}offline{% endif %}" id="node-{{ device.mac }}" data-mac="{{ device.mac }}">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <h3 class="node-title">{{ device.name or '未命名設備' }}</h3>
-                    <div class="node-sub">{{ device.mac }}</div>
-                </div>
-                <span class="status-pill {% if device.is_online() %}online{% else %}offline{% endif %}" id="status-{{ device.mac }}">
-                    {% if device.is_online() %}線上{% else %}離線{% endif %}
-                </span>
-            </div>
-            <div id="ds-list-{{ device.mac }}" class="mt-2">
-                <div class="small text-muted">載入中...</div>
+    <div class="app-card mb-3">
+        <div class="app-card-body">
+            <div class="noc-toolbar">
+                <select id="severityFilter" class="form-select form-select-sm" style="max-width: 170px;">
+                    <option value="all">全部嚴重度</option>
+                    <option value="critical">Critical</option>
+                    <option value="warning">Warning</option>
+                    <option value="normal">Normal</option>
+                </select>
+                <select id="viewMode" class="form-select form-select-sm" style="max-width: 170px;">
+                    <option value="normal">一般模式</option>
+                    <option value="large">大屏模式</option>
+                </select>
+                <select id="pageSize" class="form-select form-select-sm" style="max-width: 160px;">
+                    <option value="8">每頁 8 台</option>
+                    <option value="12" selected>每頁 12 台</option>
+                    <option value="16">每頁 16 台</option>
+                </select>
+                <label class="form-check-label ms-2">
+                    <input class="form-check-input" type="checkbox" id="autoRotate" checked> 自動輪播
+                </label>
+                <button class="btn btn-sm btn-outline-primary" id="refreshLiveBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
             </div>
         </div>
-        {% endfor %}
+    </div>
+
+    <div class="noc-kpi">
+        <div class="noc-kpi-item"><div class="label">總設備</div><div class="value" id="kpiTotal">0</div></div>
+        <div class="noc-kpi-item"><div class="label">線上設備</div><div class="value" id="kpiOnline">0</div></div>
+        <div class="noc-kpi-item"><div class="label">Critical</div><div class="value text-danger" id="kpiCritical">0</div></div>
+        <div class="noc-kpi-item"><div class="label">Warning</div><div class="value text-warning" id="kpiWarning">0</div></div>
+    </div>
+
+    <div class="noc-layout">
+        <div>
+            <div class="live-grid" id="liveGrid">
+                {% for device in devices %}
+                <div class="device-node {% if not device.is_online() %}offline critical{% endif %}" id="node-{{ device.mac }}" data-mac="{{ device.mac }}" data-severity="{% if not device.is_online() %}critical{% else %}normal{% endif %}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h3 class="node-title">{{ device.name or '未命名設備' }}</h3>
+                            <div class="node-sub">{{ device.mac }}</div>
+                        </div>
+                        <div class="d-flex gap-1 align-items-center">
+                            <span class="status-pill {% if device.is_online() %}online{% else %}offline{% endif %}" id="status-{{ device.mac }}">
+                                {% if device.is_online() %}線上{% else %}離線{% endif %}
+                            </span>
+                            <a href="/dashboard/device/{{ device.mac }}" class="btn btn-sm btn-outline-secondary" title="詳細"><i class="bi bi-box-arrow-up-right"></i></a>
+                        </div>
+                    </div>
+                    <div id="ds-list-{{ device.mac }}" class="mt-2">
+                        <div class="small text-muted">載入中...</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="event-panel">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong><i class="bi bi-activity"></i> 最近事件</strong>
+                <button class="btn btn-sm btn-outline-secondary" id="clearEventsBtn">清空</button>
+            </div>
+            <div class="event-list" id="eventList">
+                <div class="small text-muted">尚無事件</div>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -107,6 +237,8 @@
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 <script>
 const socket = io();
+let rotateTimer = null;
+let currentPage = 0;
 
 function updateClock() {
     document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
@@ -114,30 +246,97 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-socket.on('connect', () => {
-    document.getElementById('connectionStatus').textContent = 'WebSocket 已連接';
-    loadAllDatastreams();
-});
-
-socket.on('disconnect', () => {
-    document.getElementById('connectionStatus').textContent = 'WebSocket 已中斷';
-});
-
-socket.on('data_update', (data) => {
-    updateValueUI(data.device_mac, data.pin, data.value);
-});
-
-socket.on('device_status', (data) => {
-    const mac = data.device_mac;
-    const node = document.getElementById(`node-${mac}`);
-    const badge = document.getElementById(`status-${mac}`);
-    const online = !!(data.status && data.status.online);
-    if (node) node.classList.toggle('offline', !online);
-    if (badge) {
-        badge.className = `status-pill ${online ? 'online' : 'offline'}`;
-        badge.textContent = online ? '線上' : '離線';
+function pushEvent(level, message) {
+    const list = document.getElementById('eventList');
+    const now = new Date();
+    const item = document.createElement('div');
+    item.className = 'event-item';
+    item.innerHTML = `<div><span class="badge bg-${level === 'danger' ? 'danger' : level === 'warning' ? 'warning text-dark' : 'secondary'}">${level.toUpperCase()}</span> ${message}</div><div class="event-time">${now.toLocaleString('zh-TW')}</div>`;
+    if (list.firstElementChild && list.firstElementChild.classList && list.firstElementChild.classList.contains('text-muted')) {
+        list.innerHTML = '';
     }
-});
+    list.prepend(item);
+    while (list.children.length > 50) list.removeChild(list.lastChild);
+}
+
+function calcSeverity(node) {
+    const statusEl = node.querySelector('.status-pill');
+    const online = statusEl && statusEl.textContent.includes('線上');
+    if (!online) return 'critical';
+
+    const values = Array.from(node.querySelectorAll('.ds-value')).map(el => Number(el.textContent));
+    const warning = values.some(v => Number.isFinite(v) && (v > 80 || v < 0));
+    return warning ? 'warning' : 'normal';
+}
+
+function sortAndFilterNodes() {
+    const severityOrder = { critical: 0, warning: 1, normal: 2 };
+    const filter = document.getElementById('severityFilter').value;
+    const nodes = Array.from(document.querySelectorAll('.device-node'));
+
+    nodes.forEach(node => {
+        const sev = calcSeverity(node);
+        node.dataset.severity = sev;
+        node.classList.remove('critical', 'warning');
+        if (sev === 'critical') node.classList.add('critical');
+        if (sev === 'warning') node.classList.add('warning');
+    });
+
+    nodes.sort((a, b) => severityOrder[a.dataset.severity] - severityOrder[b.dataset.severity]);
+    const grid = document.getElementById('liveGrid');
+    nodes.forEach(n => grid.appendChild(n));
+
+    nodes.forEach(n => {
+        const pass = filter === 'all' || n.dataset.severity === filter;
+        n.classList.toggle('d-none', !pass);
+    });
+
+    updateKPIs(nodes.filter(n => !n.classList.contains('d-none')));
+    applyPagination();
+}
+
+function updateKPIs(visibleNodes) {
+    const allNodes = Array.from(document.querySelectorAll('.device-node'));
+    const online = allNodes.filter(n => !(n.querySelector('.status-pill')?.textContent.includes('離線'))).length;
+    const critical = visibleNodes.filter(n => n.dataset.severity === 'critical').length;
+    const warning = visibleNodes.filter(n => n.dataset.severity === 'warning').length;
+
+    document.getElementById('kpiTotal').textContent = allNodes.length;
+    document.getElementById('kpiOnline').textContent = online;
+    document.getElementById('kpiCritical').textContent = critical;
+    document.getElementById('kpiWarning').textContent = warning;
+}
+
+function applyPagination() {
+    const size = Number(document.getElementById('pageSize').value || 12);
+    const nodes = Array.from(document.querySelectorAll('.device-node')).filter(n => !n.classList.contains('d-none'));
+    const pages = Math.max(1, Math.ceil(nodes.length / size));
+    if (currentPage >= pages) currentPage = 0;
+
+    nodes.forEach((n, idx) => {
+        const start = currentPage * size;
+        const end = start + size;
+        n.style.display = (idx >= start && idx < end) ? '' : 'none';
+    });
+}
+
+function setupRotation() {
+    if (rotateTimer) clearInterval(rotateTimer);
+    if (!document.getElementById('autoRotate').checked) return;
+
+    rotateTimer = setInterval(() => {
+        const size = Number(document.getElementById('pageSize').value || 12);
+        const nodes = Array.from(document.querySelectorAll('.device-node')).filter(n => !n.classList.contains('d-none'));
+        const pages = Math.max(1, Math.ceil(nodes.length / size));
+        currentPage = (currentPage + 1) % pages;
+        applyPagination();
+    }, 8000);
+}
+
+function setViewMode() {
+    const mode = document.getElementById('viewMode').value;
+    document.getElementById('nocPage').classList.toggle('noc-large', mode === 'large');
+}
 
 function loadAllDatastreams() {
     document.querySelectorAll('.device-node').forEach(node => {
@@ -168,6 +367,8 @@ function renderDatastreams(mac, datastreams) {
             </div>
         `;
     }).join('');
+
+    sortAndFilterNodes();
 }
 
 function updateValueUI(mac, pin, value) {
@@ -186,6 +387,50 @@ function updateValueUI(mac, pin, value) {
         void rowEl.offsetWidth;
         rowEl.classList.add('update-flash');
     }
+
+    sortAndFilterNodes();
 }
+
+socket.on('connect', () => {
+    document.getElementById('connectionStatus').textContent = 'WebSocket 已連接';
+    pushEvent('secondary', 'WebSocket 已連接');
+    loadAllDatastreams();
+});
+
+socket.on('disconnect', () => {
+    document.getElementById('connectionStatus').textContent = 'WebSocket 已中斷';
+    pushEvent('danger', 'WebSocket 已中斷');
+});
+
+socket.on('data_update', (data) => {
+    updateValueUI(data.device_mac, data.pin, data.value);
+});
+
+socket.on('device_status', (data) => {
+    const mac = data.device_mac;
+    const node = document.getElementById(`node-${mac}`);
+    const badge = document.getElementById(`status-${mac}`);
+    const online = !!(data.status && data.status.online);
+    if (node) node.classList.toggle('offline', !online);
+    if (badge) {
+        badge.className = `status-pill ${online ? 'online' : 'offline'}`;
+        badge.textContent = online ? '線上' : '離線';
+    }
+    pushEvent(online ? 'warning' : 'danger', `${mac} ${online ? '恢復線上' : '離線'}`);
+    sortAndFilterNodes();
+});
+
+document.getElementById('severityFilter').addEventListener('change', sortAndFilterNodes);
+document.getElementById('viewMode').addEventListener('change', setViewMode);
+document.getElementById('pageSize').addEventListener('change', () => { currentPage = 0; applyPagination(); setupRotation(); });
+document.getElementById('autoRotate').addEventListener('change', setupRotation);
+document.getElementById('refreshLiveBtn').addEventListener('click', loadAllDatastreams);
+document.getElementById('clearEventsBtn').addEventListener('click', () => {
+    document.getElementById('eventList').innerHTML = '<div class="small text-muted">尚無事件</div>';
+});
+
+setViewMode();
+loadAllDatastreams();
+setupRotation();
 </script>
 {% endblock %}
