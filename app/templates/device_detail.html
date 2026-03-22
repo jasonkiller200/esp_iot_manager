@@ -294,6 +294,7 @@
 
 {% block scripts %}
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+{% include "_write_token_helper.html" %}
 <script>
 const deviceMac = '{{ device.mac }}';
 const datastreams = {{ datastreams_json | tojson }};
@@ -456,7 +457,7 @@ function sendControlCommand() {
 
     fetch(`/dashboard/device/${deviceMac}/control`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getWriteHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ pin, value })
     })
     .then(res => res.json().then(data => ({ ok: res.ok, data })))
@@ -477,7 +478,7 @@ function rebootDevice() {
 
     fetch(`/dashboard/device/${deviceMac}/reboot`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: getWriteHeaders({ 'Content-Type': 'application/json' })
     })
     .then(res => res.json().then(data => ({ ok: res.ok, data })))
     .then(({ ok, data }) => {
@@ -515,7 +516,7 @@ function saveDsSettings() {
 
     fetch(`/dashboard/datastream/${id}/edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getWriteHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(payload)
     })
     .then(res => res.json())

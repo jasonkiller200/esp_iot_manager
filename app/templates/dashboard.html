@@ -163,6 +163,7 @@
 
 {% block scripts %}
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+{% include "_write_token_helper.html" %}
 <script>
 const PREF_KEY = 'main_filters_v1';
 const socket = io();
@@ -180,7 +181,7 @@ function saveDeviceName() {
     const name = document.getElementById('editName').value;
     fetch(`/dashboard/device/${mac}/edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getWriteHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ name })
     })
     .then(res => res.json())
@@ -197,7 +198,7 @@ function deleteDevice(mac) {
     if (!confirm(`確定要刪除設備 ${mac} 嗎？此操作將刪除所有歷史數據。`)) return;
     fetch(`/dashboard/device/${mac}/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: getWriteHeaders({ 'Content-Type': 'application/json' })
     })
     .then(res => res.json())
     .then(data => {

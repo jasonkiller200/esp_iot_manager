@@ -12,6 +12,7 @@ from flask import (
 from app.models.device import Device
 from app.models.firmware import Firmware
 from app import db
+from app.auth import require_write_token
 
 main_bp = Blueprint("main", __name__)
 
@@ -29,6 +30,7 @@ def download_ota(filename):
 
 
 @main_bp.route("/upload", methods=["POST"])
+@require_write_token()
 def upload_file():
     if "file" not in request.files:
         flash("沒有選擇檔案", "danger")
@@ -69,6 +71,7 @@ def upload_file():
 
 
 @main_bp.route("/firmware/delete/<int:fw_id>", methods=["POST"])
+@require_write_token()
 def delete_firmware(fw_id):
     fw = Firmware.query.get_or_404(fw_id)
     try:
@@ -84,6 +87,7 @@ def delete_firmware(fw_id):
 
 
 @main_bp.route("/firmware/set_latest/<int:fw_id>", methods=["POST"])
+@require_write_token()
 def set_latest_version(fw_id):
     fw = Firmware.query.get_or_404(fw_id)
     try:
@@ -97,6 +101,7 @@ def set_latest_version(fw_id):
 
 
 @main_bp.route("/device/push_update/<int:device_id>", methods=["POST"])
+@require_write_token()
 def push_update(device_id):
     device = Device.query.get_or_404(device_id)
     version = request.form.get("version")

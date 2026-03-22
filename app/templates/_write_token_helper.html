@@ -1,0 +1,10 @@
+<script>
+window.getWriteHeaders = function(extraHeaders) {
+  const headers = Object.assign({}, extraHeaders || {});
+  const token = window.localStorage.getItem('esp_write_token') || '';
+  if (token) {
+    headers['X-API-Token'] = token;
+  }
+  return headers;
+};
+</script>

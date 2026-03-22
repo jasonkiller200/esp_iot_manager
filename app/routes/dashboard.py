@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, jsonify, request
 from flask_socketio import emit
 from app import db, socketio
 from app.mqtt_manager import mqtt_manager
+from app.auth import require_write_token
 from app.models.device import Device
 from app.models.datastream import DataStream, DataPoint, HourlyAggregate
 from datetime import datetime, timezone, timedelta
@@ -279,6 +280,7 @@ def api_device_stats(device_mac):
 
 
 @dashboard_bp.route("/device/<device_mac>/edit", methods=["POST"])
+@require_write_token()
 def edit_device(device_mac):
     """編輯設備資訊"""
     device = Device.query.filter_by(mac=device_mac).first_or_404()
@@ -292,12 +294,14 @@ def edit_device(device_mac):
 
 
 @dashboard_bp.route("/device/<device_mac>/delete", methods=["POST"])
+@require_write_token()
 def delete_device(device_mac):
     """刪除設備及其所有數據"""
     device = Device.query.filter_by(mac=device_mac).first_or_404()
 
     # 刪除關聯的數據點和數據流
     DataPoint.query.filter_by(device_mac=device_mac).delete()
+    HourlyAggregate.query.filter_by(device_mac=device_mac).delete()
     DataStream.query.filter_by(device_mac=device_mac).delete()
 
     db.session.delete(device)
@@ -307,6 +311,7 @@ def delete_device(device_mac):
 
 
 @dashboard_bp.route("/datastream/<int:ds_id>/edit", methods=["POST"])
+@require_write_token()
 def edit_datastream(ds_id):
     """編輯數據流設定"""
     ds = DataStream.query.get_or_404(ds_id)
@@ -330,6 +335,7 @@ def edit_datastream(ds_id):
 
 
 @dashboard_bp.route("/device/<device_mac>/control", methods=["POST"])
+@require_write_token()
 def control_device(device_mac):
     """透過 MQTT 發送設備控制指令"""
     device = Device.query.filter_by(mac=device_mac).first_or_404()
@@ -366,6 +372,7 @@ def control_device(device_mac):
 
 
 @dashboard_bp.route("/device/<device_mac>/reboot", methods=["POST"])
+@require_write_token()
 def reboot_device(device_mac):
     """透過 MQTT 發送設備重啟指令"""
     device = Device.query.filter_by(mac=device_mac).first_or_404()

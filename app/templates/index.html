@@ -4,6 +4,16 @@
 
 {% block body %}
 <div class="container app-page">
+    <div class="alert alert-info mb-3" role="alert">
+        <div class="d-flex flex-column flex-md-row gap-2 align-items-md-center">
+            <strong>管理寫入 Token</strong>
+            <input id="writeTokenInput" type="password" class="form-control form-control-sm" style="max-width: 360px;" placeholder="請輸入 WRITE_API_TOKEN">
+            <button class="btn btn-sm btn-primary" type="button" onclick="saveWriteToken()">儲存</button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="clearWriteToken()">清除</button>
+        </div>
+        <div class="small mt-1">此 token 只保存在當前瀏覽器 localStorage。</div>
+    </div>
+
     <div class="app-header">
         <div>
             <h1 class="app-title">ESP-IoT 管理控制台</h1>
@@ -29,6 +39,7 @@
         <div class="app-card-header"><strong>上傳新韌體 (.bin)</strong></div>
         <div class="app-card-body">
             <form action="/upload" method="post" enctype="multipart/form-data" class="row g-2">
+                <input type="hidden" name="write_token" id="uploadWriteToken">
                 <div class="col-lg-3 col-md-6">
                     <input type="file" name="file" class="form-control" accept=".bin" required>
                 </div>
@@ -98,6 +109,7 @@
                                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                         </div>
                                                         <form method="POST" action="/device/push_update/{{ dev.id }}">
+                                                            <input type="hidden" name="write_token" class="write-token-field">
                                                             <div class="modal-body">
                                                                 <p class="mb-1">目前版本: {{ dev.version }}</p>
                                                                 <p>晶片類型: {{ dev.chip_type }}</p>
@@ -145,10 +157,12 @@
                                 <a href="/ota/{{ fw.filename }}" class="btn btn-sm btn-outline-secondary">下載</a>
                                 {% if not fw.is_active %}
                                 <form method="POST" action="/firmware/set_latest/{{ fw.id }}">
+                                    <input type="hidden" name="write_token" class="write-token-field">
                                     <button type="submit" class="btn btn-sm btn-outline-primary">設為最新</button>
                                 </form>
                                 {% endif %}
                                 <form method="POST" action="/firmware/delete/{{ fw.id }}" onsubmit="return confirm('確定要刪除嗎?');">
+                                    <input type="hidden" name="write_token" class="write-token-field">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">刪除</button>
                                 </form>
                             </div>
@@ -160,4 +174,38 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% include "_write_token_helper.html" %}
+<script>
+function syncWriteTokenFields() {
+    const token = window.localStorage.getItem('esp_write_token') || '';
+    const uploadField = document.getElementById('uploadWriteToken');
+    if (uploadField) uploadField.value = token;
+    document.querySelectorAll('.write-token-field').forEach(el => {
+        el.value = token;
+    });
+}
+
+function saveWriteToken() {
+    const token = document.getElementById('writeTokenInput').value.trim();
+    if (!token) return;
+    window.localStorage.setItem('esp_write_token', token);
+    syncWriteTokenFields();
+    alert('WRITE_API_TOKEN 已儲存到本機瀏覽器');
+}
+
+function clearWriteToken() {
+    window.localStorage.removeItem('esp_write_token');
+    document.getElementById('writeTokenInput').value = '';
+    syncWriteTokenFields();
+}
+
+const current = window.localStorage.getItem('esp_write_token') || '';
+if (current) {
+    document.getElementById('writeTokenInput').value = current;
+}
+syncWriteTokenFields();
+</script>
 {% endblock %}
