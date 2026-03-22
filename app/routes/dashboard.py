@@ -526,12 +526,18 @@ def reboot_device(device_mac):
 def list_device_commands(device_mac):
     """列出設備命令 lifecycle"""
     limit = min(100, int(request.args.get("limit", 20)))
-    rows = (
-        DeviceCommand.query.filter_by(device_mac=device_mac)
-        .order_by(DeviceCommand.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    status_filter = (request.args.get("status") or "").strip()
+    type_filter = (request.args.get("type") or "").strip()
+
+    query = DeviceCommand.query.filter_by(device_mac=device_mac)
+
+    if status_filter:
+        query = query.filter(DeviceCommand.status == status_filter)
+
+    if type_filter:
+        query = query.filter(DeviceCommand.command_type == type_filter)
+
+    rows = query.order_by(DeviceCommand.created_at.desc()).limit(limit).all()
 
     # 逾時命令標記
     now = datetime.now(TAIPEI_TZ)

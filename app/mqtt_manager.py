@@ -13,6 +13,7 @@ from app import db
 from app.models.device import Device
 from app.models.datastream import DataStream, DataPoint
 from app.models.command import DeviceCommand
+from sqlalchemy import and_
 
 TAIPEI_TZ = timezone(timedelta(hours=8))
 logger = logging.getLogger(__name__)
@@ -80,9 +81,13 @@ class MQTTManager:
         self._stop_event.clear()
 
         def _worker():
+            tick = 0
             while not self._stop_event.is_set():
                 time.sleep(max(1, self._flush_interval_sec))
                 self.flush_data_buffer()
+                tick += 1
+                if tick % 5 == 0:
+                    self.mark_command_timeouts()
 
         self._flusher_thread = threading.Thread(
             target=_worker, name="mqtt-flusher", daemon=True
@@ -338,6 +343,38 @@ class MQTTManager:
             command.status = "ack"
 
         db.session.commit()
+
+    def mark_command_timeouts(self):
+        """背景清理：將逾時的 queued/sent 命令標為 timeout"""
+        if not self.app:
+            return 0
+
+        try:
+            with self.app.app_context():
+                now = datetime.now(TAIPEI_TZ)
+                rows = DeviceCommand.query.filter(
+                    and_(
+                        DeviceCommand.status.in_(["queued", "sent"]),
+                        DeviceCommand.timeout_at.isnot(None),
+                        DeviceCommand.timeout_at < now,
+                    )
+                ).all()
+
+                if not rows:
+                    return 0
+
+                for row in rows:
+                    row.status = "timeout"
+                    if not row.error_message:
+                        row.error_message = "command timeout"
+
+                db.session.commit()
+                logger.info(f"⌛ Marked {len(rows)} timed-out commands")
+                return len(rows)
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to mark command timeouts: {e}")
+            return 0
 
     def disconnect(self):
         """斷開 MQTT 連線"""

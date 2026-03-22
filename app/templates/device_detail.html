@@ -201,7 +201,22 @@
     <div class="app-card mb-3">
         <div class="app-card-header">
             <strong><i class="bi bi-list-check"></i> 命令追蹤</strong>
-            <button class="btn btn-sm btn-outline-primary" id="refreshCommandsBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+            <div class="d-flex gap-2 align-items-center">
+                <select id="commandStatusFilter" class="form-select form-select-sm" style="min-width: 120px;">
+                    <option value="">全部狀態</option>
+                    <option value="queued">queued</option>
+                    <option value="sent">sent</option>
+                    <option value="ack">ack</option>
+                    <option value="timeout">timeout</option>
+                    <option value="failed">failed</option>
+                </select>
+                <select id="commandTypeFilter" class="form-select form-select-sm" style="min-width: 120px;">
+                    <option value="">全部命令</option>
+                    <option value="control">control</option>
+                    <option value="reboot">reboot</option>
+                </select>
+                <button class="btn btn-sm btn-outline-primary" id="refreshCommandsBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+            </div>
         </div>
         <div class="app-card-body">
             <div class="table-responsive">
@@ -566,7 +581,13 @@ function renderCommandStatus(status) {
 }
 
 function refreshCommands() {
-    fetch(`/dashboard/device/${deviceMac}/commands?limit=20`)
+    const status = document.getElementById('commandStatusFilter').value;
+    const type = document.getElementById('commandTypeFilter').value;
+    const qs = new URLSearchParams({ limit: '20' });
+    if (status) qs.set('status', status);
+    if (type) qs.set('type', type);
+
+    fetch(`/dashboard/device/${deviceMac}/commands?${qs.toString()}`)
         .then(res => res.json())
         .then(rows => {
             const tbody = document.getElementById('commandsTableBody');
@@ -635,6 +656,8 @@ document.getElementById('refreshBtn').addEventListener('click', refreshAllData);
 document.getElementById('sendControlBtn').addEventListener('click', sendControlCommand);
 document.getElementById('rebootBtn').addEventListener('click', rebootDevice);
 document.getElementById('refreshCommandsBtn').addEventListener('click', refreshCommands);
+document.getElementById('commandStatusFilter').addEventListener('change', refreshCommands);
+document.getElementById('commandTypeFilter').addEventListener('change', refreshCommands);
 document.getElementById('deviceSwitch').addEventListener('change', (e) => {
     const mac = e.target.value;
     if (mac !== deviceMac) window.location.href = `/dashboard/device/${mac}`;

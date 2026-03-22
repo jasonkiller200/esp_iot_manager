@@ -85,6 +85,7 @@
 3. Dashboard 顯示命令結果與最後回應時間
 4. 操作審計紀錄（who/when/what/target/result）
 5. 下發控制加入白名單檢查與參數驗證（pin/value）
+6. 命令 timeout 背景標記與 UI 篩選（status/type）
 
 ### 驗收標準
 
