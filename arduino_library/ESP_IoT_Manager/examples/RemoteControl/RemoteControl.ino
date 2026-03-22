@@ -1,57 +1,76 @@
 #include <ESP_IoT_Manager.h>
 
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+/*
+ * RemoteControl (modular version)
+ *
+ * 與 RemoteControlMQTT 相同採用模組化方式：
+ * - 手機配網
+ * - mapControlPin 映射輸出
+ * - system/reboot 指令
+ */
+
 const char* serverIP = "192.168.1.100";
+const int serverPort = 5000;
 
-ESP_IoT_Manager iot(ssid, password, serverIP, 5000);
+const char* mqttHost = "192.168.1.100";
+const uint16_t mqttPort = 1883;
 
-// 定義 LED 腳位
-const int LED_PIN = 2;  // ESP32/ESP8266 內建 LED
-int ledState = LOW;
+ESP_IoT_Manager iot(serverIP, serverPort);
 
-// 當收到控制指令時的回調函式
-void handleControl(String pin, String value) {
-  Serial.printf("Received command: %s = %s\n", pin.c_str(), value.c_str());
-  
-  if (pin == "V10") {
-    // V10 控制 LED 開關
-    ledState = (value == "1") ? HIGH : LOW;
-    digitalWrite(LED_PIN, ledState);
-    Serial.printf("LED turned %s\n", ledState ? "ON" : "OFF");
-    
-    // 回報 LED 狀態
-    iot.sendData("V10", ledState);
-  }
-  else if (pin == "V11") {
-    // V11 控制 LED 亮度（PWM）
-    int brightness = value.toInt();
-    analogWrite(LED_PIN, brightness);
-    Serial.printf("LED brightness: %d\n", brightness);
+const int LED_PIN = 2;
+const int PWM_PIN = 5;
+
+void onSystemCommand(String action, String payload) {
+  Serial.printf("[SYSTEM] action=%s payload=%s\n", action.c_str(), payload.c_str());
+  if (action == "reboot") {
+    delay(100);
+#ifdef ESP32
+    ESP.restart();
+#else
+    ESP.reset();
+#endif
   }
 }
 
+void onControl(String pin, String value) {
+  Serial.printf("[CONTROL] %s = %s\n", pin.c_str(), value.c_str());
+}
+
 void setup() {
+  Serial.begin(115200);
+  delay(300);
+
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  
-  iot.begin("1.0.0");
-  
-  // 註冊控制指令回調函式
-  iot.onControlMessage(handleControl);
-  
-  Serial.println("Device ready for remote control!");
-  Serial.println("Use Web interface to control V10 (LED On/Off)");
+  pinMode(PWM_PIN, OUTPUT);
+
+  iot.enableProvisioning(true, "ESP-IoT-Setup", "", 180);
+
+  if (!iot.begin("1.2.0")) {
+    Serial.println("[INIT] failed");
+    return;
+  }
+
+  iot.enableRemoteControl(true, mqttHost, mqttPort);
+
+  iot.mapControlPin("V10", LED_PIN, OUTPUT_DIGITAL);      // 0/1 or ON/OFF
+  iot.mapControlPin("V11", PWM_PIN, OUTPUT_PWM, 0, 1023); // PWM
+
+  iot.onControlMessage(onControl);
+  iot.onSystemCommand(onSystemCommand);
+
+  iot.registerDatastream("V10", "LED Switch", 0, 1, "state", "integer");
+  iot.registerDatastream("V11", "LED PWM", 0, 1023, "duty", "integer");
+
+  Serial.println("Device ready for modular remote control");
 }
 
 void loop() {
   iot.loop();
-  
-  // 定期回報設備狀態
+
   static unsigned long lastReport = 0;
   if (millis() - lastReport > 5000) {
-    iot.sendData("V0", ledState ? "ON" : "OFF");  // LED status
-    iot.sendData("V1", analogRead(A0));           // Analog input
     lastReport = millis();
+    iot.sendData("V0", digitalRead(LED_PIN));
   }
 }
