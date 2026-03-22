@@ -171,6 +171,12 @@
                     <option value="warning">Warning</option>
                     <option value="normal">Normal</option>
                 </select>
+                <select id="groupFilter" class="form-select form-select-sm" style="max-width: 170px;">
+                    <option value="all">全部群組</option>
+                    <option value="ESP32">ESP32</option>
+                    <option value="ESP8266">ESP8266</option>
+                    <option value="unknown">Unknown</option>
+                </select>
                 <select id="viewMode" class="form-select form-select-sm" style="max-width: 170px;">
                     <option value="normal">一般模式</option>
                     <option value="large">大屏模式</option>
@@ -182,6 +188,9 @@
                 </select>
                 <label class="form-check-label ms-2">
                     <input class="form-check-input" type="checkbox" id="autoRotate" checked> 自動輪播
+                </label>
+                <label class="form-check-label ms-2">
+                    <input class="form-check-input" type="checkbox" id="soundAlert" checked> 告警聲音
                 </label>
                 <button class="btn btn-sm btn-outline-primary" id="refreshLiveBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
             </div>
@@ -199,7 +208,7 @@
         <div>
             <div class="live-grid" id="liveGrid">
                 {% for device in devices %}
-                <div class="device-node {% if not device.is_online() %}offline critical{% endif %}" id="node-{{ device.mac }}" data-mac="{{ device.mac }}" data-severity="{% if not device.is_online() %}critical{% else %}normal{% endif %}">
+                <div class="device-node {% if not device.is_online() %}offline critical{% endif %}" id="node-{{ device.mac }}" data-mac="{{ device.mac }}" data-chip="{{ device.chip_type or 'unknown' }}" data-severity="{% if not device.is_online() %}critical{% else %}normal{% endif %}">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <h3 class="node-title">{{ device.name or '未命名設備' }}</h3>
@@ -239,6 +248,7 @@
 const socket = io();
 let rotateTimer = null;
 let currentPage = 0;
+let lastBeepAt = 0;
 
 function updateClock() {
     document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
@@ -257,6 +267,34 @@ function pushEvent(level, message) {
     }
     list.prepend(item);
     while (list.children.length > 50) list.removeChild(list.lastChild);
+
+    if (level === 'danger') {
+        beepIfEnabled();
+    }
+}
+
+function beepIfEnabled() {
+    const enabled = document.getElementById('soundAlert').checked;
+    if (!enabled) return;
+
+    const now = Date.now();
+    if (now - lastBeepAt < 1200) return;
+    lastBeepAt = now;
+
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.value = 0.04;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+    } catch (e) {
+        console.warn('beep failed', e);
+    }
 }
 
 function calcSeverity(node) {
@@ -272,6 +310,7 @@ function calcSeverity(node) {
 function sortAndFilterNodes() {
     const severityOrder = { critical: 0, warning: 1, normal: 2 };
     const filter = document.getElementById('severityFilter').value;
+    const group = document.getElementById('groupFilter').value;
     const nodes = Array.from(document.querySelectorAll('.device-node'));
 
     nodes.forEach(node => {
@@ -287,7 +326,10 @@ function sortAndFilterNodes() {
     nodes.forEach(n => grid.appendChild(n));
 
     nodes.forEach(n => {
-        const pass = filter === 'all' || n.dataset.severity === filter;
+        const severityPass = filter === 'all' || n.dataset.severity === filter;
+        const chip = (n.dataset.chip || 'unknown').toUpperCase();
+        const groupPass = group === 'all' || chip === group.toUpperCase() || (group === 'unknown' && chip === 'UNKNOWN');
+        const pass = severityPass && groupPass;
         n.classList.toggle('d-none', !pass);
     });
 
@@ -421,6 +463,7 @@ socket.on('device_status', (data) => {
 });
 
 document.getElementById('severityFilter').addEventListener('change', sortAndFilterNodes);
+document.getElementById('groupFilter').addEventListener('change', sortAndFilterNodes);
 document.getElementById('viewMode').addEventListener('change', setViewMode);
 document.getElementById('pageSize').addEventListener('change', () => { currentPage = 0; applyPagination(); setupRotation(); });
 document.getElementById('autoRotate').addEventListener('change', setupRotation);
