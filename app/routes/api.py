@@ -9,6 +9,20 @@ TAIPEI_TZ = timezone(timedelta(hours=8))
 api_bp = Blueprint("api", __name__)
 
 
+@api_bp.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"})
+
+
+@api_bp.route("/ready", methods=["GET"])
+def ready():
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        return jsonify({"status": "ready"})
+    except Exception as e:
+        return jsonify({"status": "not_ready", "error": str(e)}), 500
+
+
 @api_bp.route("/update_status", methods=["POST"])
 def update_status():
     data = request.json
@@ -18,7 +32,8 @@ def update_status():
 
     device = Device.query.filter_by(mac=mac).first()
     if not device:
-        device = Device(mac=mac)
+        device = Device()
+        device.mac = mac
         db.session.add(device)
 
     device.ip = data.get("ip")
