@@ -1,471 +1,585 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>設備監控 - {{ device.mac }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+{% extends "base_dashboard.html" %}
+
+{% block title %}設備監控 - {{ device.mac }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<style>
+    .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 0.75rem;
+    }
+
+    .controls-grid .item {
+        grid-column: span 3;
+    }
+
+    .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .metric-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 0.85rem;
+    }
+
+    .metric-value {
+        font-size: 1.7rem;
+        font-weight: 700;
+    }
+
+    .chart-wrap {
+        height: 290px;
+    }
+
+    .widget-slot {
+        width: 100%;
+        height: 100%;
+    }
+
+    .widget-gauge-wrap {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+
+    .widget-gauge-center {
+        position: absolute;
+        left: 50%;
+        top: 62%;
+        transform: translate(-50%, -50%);
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        text-align: center;
+        line-height: 1.1;
+    }
+
+    .widget-gauge-center small {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .widget-progress-wrap {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.75rem;
+    }
+
+    .widget-progress-label {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+
+    .widget-progress-value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    @media (max-width: 992px) {
+        .controls-grid .item {
+            grid-column: span 6;
         }
-        .container {
-            padding: 2rem 0;
+    }
+
+    @media (max-width: 768px) {
+        .controls-grid .item {
+            grid-column: span 12;
         }
-        .card {
-            border-radius: 15px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 1.5rem;
-            border: none;
-        }
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            font-weight: bold;
-        }
-        .metric-card {
-            background: white;
-            border-radius: 10px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            transition: transform 0.2s;
-        }
-        .metric-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-        .metric-value {
-            font-size: 2.5rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-        .metric-label {
-            color: #6c757d;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-        .metric-unit {
-            font-size: 1.2rem;
-            color: #999;
-            margin-left: 0.3rem;
-        }
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin: 1rem 0;
-        }
-        .status-indicator {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 0.5rem;
-        }
-        .status-online {
-            background: #28a745;
-            box-shadow: 0 0 10px #28a745;
-        }
-        .status-offline {
-            background: #dc3545;
-        }
-        .header-title {
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .connection-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .update-time {
-            font-size: 0.8rem;
-            color: #999;
-            text-align: right;
-            margin-top: 0.5rem;
-        }
-    </style>
-</head>
-<body>
-    <div class="connection-status" id="connectionStatus">
-        <i class="bi bi-circle-fill text-warning pulse"></i> 連接中...
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="connection-status" id="connectionStatus">
+    <i class="bi bi-circle-fill text-warning"></i> 連接中...
+</div>
+
+<div class="container app-page">
+    <div class="app-header">
+        <div>
+            <h1 class="app-title">設備即時監控</h1>
+            <p class="app-subtitle">{{ device.name or '未命名設備' }} | {{ device.mac }} | {{ device.chip_type or 'N/A' }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> 返回儀表板</a>
+        </div>
     </div>
 
-    <div class="container">
-        <!-- 頁首 -->
-        <div class="text-center mb-4">
-            <a href="/dashboard" class="btn btn-light mb-3">
-                <i class="bi bi-arrow-left"></i> 返回儀表板
-            </a>
-            <h1 class="header-title">
-                <i class="bi bi-router"></i> 設備即時監控
-            </h1>
-            <p class="text-white">
-                <span class="status-indicator {% if device.is_online() %}status-online{% else %}status-offline{% endif %}"></span>
-                {{ device.mac }} - {{ device.chip_type }}
-            </p>
-        </div>
-
-        <!-- 設備資訊卡 -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-info-circle"></i> 設備資訊
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong><i class="bi bi-sliders"></i> 視圖自訂</strong>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" id="resetViewBtn">重設</button>
+                <button class="btn btn-sm btn-outline-primary" id="saveViewBtn">儲存設定</button>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <strong>MAC 地址:</strong><br>
-                        <code>{{ device.mac }}</code>
-                    </div>
-                    <div class="col-md-3">
-                        <strong>IP 地址:</strong><br>
-                        {{ device.ip or 'N/A' }}
-                    </div>
-                    <div class="col-md-3">
-                        <strong>韌體版本:</strong><br>
-                        {{ device.version or 'N/A' }}
-                    </div>
-                    <div class="col-md-3">
-                        <strong>最後上線:</strong><br>
-                        <span id="lastSeen">{{ device.last_seen.strftime('%Y-%m-%d %H:%M:%S') if device.last_seen else 'N/A' }}</span>
-                    </div>
+        </div>
+        <div class="app-card-body">
+            <div class="controls-grid">
+                <div class="item">
+                    <label class="form-label small">預設儀表樣式</label>
+                    <select id="defaultWidgetStyle" class="form-select form-select-sm">
+                        <option value="line">折線圖</option>
+                        <option value="bar">長條圖</option>
+                        <option value="area">面積圖</option>
+                        <option value="gauge">指針儀表</option>
+                        <option value="progress">進度條</option>
+                    </select>
+                </div>
+                <div class="item">
+                    <label class="form-label small">資料來源</label>
+                    <select id="sourceType" class="form-select form-select-sm">
+                        <option value="raw">即時原始資料</option>
+                        <option value="aggregated">彙總資料 (平均)</option>
+                    </select>
+                </div>
+                <div class="item">
+                    <label class="form-label small">時間範圍</label>
+                    <select id="timeRange" class="form-select form-select-sm">
+                        <option value="1">最近 1 小時</option>
+                        <option value="6">最近 6 小時</option>
+                        <option value="24" selected>最近 24 小時</option>
+                        <option value="168">最近 7 天</option>
+                    </select>
+                </div>
+                <div class="item">
+                    <label class="form-label small">設備切換</label>
+                    <select id="deviceSwitch" class="form-select form-select-sm">
+                        {% for d in devices %}
+                        <option value="{{ d.mac }}" {% if d.mac == device.mac %}selected{% endif %}>{{ d.name or d.mac }} ({{ d.mac }})</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- 即時數據指標 -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-speedometer"></i> 即時數據
-                <button class="btn btn-sm btn-light float-end" onclick="refreshAllData()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong><i class="bi bi-terminal"></i> 設備控制</strong>
+            <span class="small text-muted">透過 MQTT 下發控制指令</span>
+        </div>
+        <div class="app-card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label small">控制 Pin</label>
+                    <select id="controlPin" class="form-select form-select-sm">
+                        {% for ds in datastreams %}
+                        <option value="{{ ds.pin }}">{{ ds.name }} ({{ ds.pin }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-4 col-md-6">
+                    <label class="form-label small">控制值</label>
+                    <input id="controlValue" type="text" class="form-control form-control-sm" placeholder="例如 1 / ON / 75">
+                </div>
+                <div class="col-lg-4 col-md-12 d-flex gap-2">
+                    <button class="btn btn-sm btn-primary" id="sendControlBtn">
+                        <i class="bi bi-send"></i> 發送控制
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" id="rebootBtn">
+                        <i class="bi bi-arrow-repeat"></i> 重啟設備
+                    </button>
+                </div>
+            </div>
+            <div id="controlResult" class="small mt-2 text-muted">提示：設備韌體需訂閱 `devices/&lt;mac&gt;/control/+` 才會收到控制命令。</div>
+        </div>
+    </div>
+
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong><i class="bi bi-speedometer"></i> 即時數據</strong>
+            <button class="btn btn-sm btn-outline-primary" id="refreshBtn"><i class="bi bi-arrow-clockwise"></i> 刷新</button>
+        </div>
+        <div class="app-card-body">
+            <div class="metric-grid" id="metricsGrid">
+                {% for ds in datastreams %}
+                <div class="metric-card" style="border-left: 4px solid {{ ds.color or '#1f6feb' }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold" id="ds-name-{{ ds.pin }}">{{ ds.name }}</div>
+                        <span class="badge bg-light text-dark">{{ ds.pin }}</span>
+                    </div>
+                    <div class="metric-value" id="value-{{ ds.pin }}">--</div>
+                    <div class="small text-muted">
+                        <span id="ds-unit-{{ ds.pin }}">{{ ds.unit or '' }}</span>
+                        <span id="time-{{ ds.pin }}" class="ms-2">載入中...</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {% for ds in datastreams %}
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong>{{ ds.name }} ({{ ds.pin }}) 趨勢</strong>
+            <div class="d-flex gap-2">
+                <select class="form-select form-select-sm ds-widget-type" data-pin="{{ ds.pin }}" style="min-width: 145px;">
+                    <option value="line">折線圖</option>
+                    <option value="bar">長條圖</option>
+                    <option value="area">面積圖</option>
+                    <option value="gauge">指針儀表</option>
+                    <option value="progress">進度條</option>
+                </select>
+                <button class="btn btn-sm btn-outline-secondary" onclick="openEditDsModal({{ ds.id }}, '{{ ds.pin }}', '{{ ds.name }}', '{{ ds.unit or '' }}', '{{ ds.color or '#1f6feb' }}', {{ ds.min_value }}, {{ ds.max_value }})">
+                    <i class="bi bi-gear"></i> 編輯資料流
                 </button>
             </div>
-            <div class="card-body">
-                <div class="stats-grid" id="metricsGrid">
-                    {% for ds in datastreams %}
-                    <div class="metric-card" data-pin="{{ ds.pin }}" style="border-left: 5px solid {{ ds.color or '#667eea' }}">
-                        <div class="float-end">
-                            <button class="btn btn-sm btn-link text-muted" 
-                                    onclick="openEditDsModal({{ ds.id }}, '{{ ds.pin }}', '{{ ds.name }}', '{{ ds.unit or '' }}', '{{ ds.color or '#667eea' }}', {{ ds.min_value }}, {{ ds.max_value }})">
-                                <i class="bi bi-gear"></i>
-                            </button>
-                        </div>
-                        <div class="metric-value" id="value-{{ ds.pin }}">
-                            <span class="spinner-border spinner-border-sm"></span>
-                        </div>
-                        <div class="metric-label">
-                            <i class="bi bi-diagram-3"></i> <span id="ds-name-{{ ds.pin }}">{{ ds.name }}</span>
-                            <span class="badge bg-secondary">{{ ds.pin }}</span>
-                            <span id="ds-unit-{{ ds.pin }}" class="metric-unit">{{ ds.unit or '' }}</span>
-                        </div>
-                        <div class="update-time" id="time-{{ ds.pin }}">載入中...</div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
         </div>
-
-        <!-- 即時圖表 -->
-        {% for ds in datastreams %}
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-graph-up"></i> {{ ds.name }} ({{ ds.pin }}) - 即時趨勢
-                <select class="form-select form-select-sm d-inline-block w-auto float-end" 
-                        onchange="changeTimeRange('{{ ds.pin }}', this.value)">
-                    <option value="1">最近 1 小時</option>
-                    <option value="6">最近 6 小時</option>
-                    <option value="24" selected>最近 24 小時</option>
-                    <option value="168">最近 7 天</option>
-                </select>
-            </div>
-            <div class="card-body">
-                <div class="chart-container">
-                    <canvas id="chart-{{ ds.pin }}"></canvas>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-3 text-center">
-                        <strong>最小值</strong><br>
-                        <span class="text-primary" id="min-{{ ds.pin }}">--</span>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <strong>最大值</strong><br>
-                        <span class="text-danger" id="max-{{ ds.pin }}">--</span>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <strong>平均值</strong><br>
-                        <span class="text-success" id="avg-{{ ds.pin }}">--</span>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <strong>數據點數</strong><br>
-                        <span class="text-info" id="count-{{ ds.pin }}">--</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-
-    </div>
-
-    <!-- 編輯數據流 Modal -->
-    <div class="modal fade" id="editDsModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">編輯數據流 (<span id="modalPin"></span>)</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="editDsId">
-                    <div class="mb-3">
-                        <label class="form-label">顯示名稱</label>
-                        <input type="text" class="form-control" id="editDsName">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">單位</label>
-                        <input type="text" class="form-control" id="editDsUnit" placeholder="例如：°C, %, lux">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">顯示顏色</label>
-                        <input type="color" class="form-control form-control-color" id="editDsColor" value="#667eea">
-                    </div>
-                    <div class="row">
-                        <div class="col-6">
-                            <label class="form-label">最小值</label>
-                            <input type="number" step="any" class="form-control" id="editDsMin">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label">最大值</label>
-                            <input type="number" step="any" class="form-control" id="editDsMax">
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="saveDsSettings()">儲存變更</button>
-                </div>
+        <div class="app-card-body">
+            <div class="chart-wrap"><div class="widget-slot" id="widget-{{ ds.pin }}"></div></div>
+            <div class="row text-center mt-3">
+                <div class="col-3"><div class="small text-muted">最小值</div><div id="min-{{ ds.pin }}">--</div></div>
+                <div class="col-3"><div class="small text-muted">最大值</div><div id="max-{{ ds.pin }}">--</div></div>
+                <div class="col-3"><div class="small text-muted">平均值</div><div id="avg-{{ ds.pin }}">--</div></div>
+                <div class="col-3"><div class="small text-muted">數據點數</div><div id="count-{{ ds.pin }}">--</div></div>
             </div>
         </div>
     </div>
+    {% endfor %}
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script>
-        const deviceMac = '{{ device.mac }}';
-        const datastreams = {{ datastreams_json | tojson }};
-        const charts = {};
-        const chartData = {};
-        
-        // 初始化 Modal
-        const editDsModal = new bootstrap.Modal(document.getElementById('editDsModal'));
+<div class="modal fade" id="editDsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">編輯數據流 (<span id="modalPin"></span>)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editDsId">
+                <div class="mb-2">
+                    <label class="form-label">顯示名稱</label>
+                    <input type="text" class="form-control" id="editDsName">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">單位</label>
+                    <input type="text" class="form-control" id="editDsUnit">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">顏色</label>
+                    <input type="color" class="form-control form-control-color" id="editDsColor" value="#1f6feb">
+                </div>
+                <div class="row">
+                    <div class="col-6">
+                        <label class="form-label">最小值</label>
+                        <input type="number" step="any" class="form-control" id="editDsMin">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">最大值</label>
+                        <input type="number" step="any" class="form-control" id="editDsMax">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveDsSettings()">儲存變更</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        function openEditDsModal(id, pin, name, unit, color, min, max) {
-            document.getElementById('editDsId').value = id;
-            document.getElementById('modalPin').textContent = pin;
-            document.getElementById('editDsName').value = name;
-            document.getElementById('editDsUnit').value = unit;
-            document.getElementById('editDsColor').value = color;
-            document.getElementById('editDsMin').value = min;
-            document.getElementById('editDsMax').value = max;
-            editDsModal.show();
-        }
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+const deviceMac = '{{ device.mac }}';
+const datastreams = {{ datastreams_json | tojson }};
+const devices = {{ devices_json | tojson }};
+const widgets = {};
+const historyCache = {};
+const widgetTypes = {};
+const socket = io();
+const editDsModal = new bootstrap.Modal(document.getElementById('editDsModal'));
+const PREF_KEY = `device_view_${deviceMac}`;
 
-        function saveDsSettings() {
-            const id = document.getElementById('editDsId').value;
-            const pin = document.getElementById('modalPin').textContent;
-            const data = {
-                name: document.getElementById('editDsName').value,
-                unit: document.getElementById('editDsUnit').value,
-                color: document.getElementById('editDsColor').value,
-                min_value: document.getElementById('editDsMin').value,
-                max_value: document.getElementById('editDsMax').value
-            };
+function getViewConfig() {
+    const perPin = {};
+    document.querySelectorAll('.ds-widget-type').forEach((sel) => {
+        perPin[sel.dataset.pin] = sel.value;
+    });
 
-            fetch(`/dashboard/datastream/${id}/edit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            })
-            .then(res => res.json())
-            .then(resData => {
-                if (resData.status === 'ok') {
-                    editDsModal.hide();
-                    location.reload();
-                }
+    return {
+        defaultWidgetStyle: document.getElementById('defaultWidgetStyle').value,
+        sourceType: document.getElementById('sourceType').value,
+        timeRange: Number(document.getElementById('timeRange').value || 24),
+        perPinWidget: perPin,
+    };
+}
+
+function applyViewConfig(cfg) {
+    if (cfg.defaultWidgetStyle) document.getElementById('defaultWidgetStyle').value = cfg.defaultWidgetStyle;
+    if (cfg.sourceType) document.getElementById('sourceType').value = cfg.sourceType;
+    if (cfg.timeRange) document.getElementById('timeRange').value = String(cfg.timeRange);
+
+    const defaultStyle = document.getElementById('defaultWidgetStyle').value;
+    const perPin = cfg.perPinWidget || {};
+    document.querySelectorAll('.ds-widget-type').forEach((sel) => {
+        sel.value = perPin[sel.dataset.pin] || defaultStyle;
+        widgetTypes[sel.dataset.pin] = sel.value;
+    });
+}
+
+function saveViewConfig() {
+    DashboardPrefs.save(PREF_KEY, getViewConfig());
+}
+
+function resetViewConfig() {
+    DashboardPrefs.clear(PREF_KEY);
+    applyViewConfig({ defaultWidgetStyle: 'line', sourceType: 'raw', timeRange: 24, perPinWidget: {} });
+    reloadAllCharts();
+}
+
+function updateConnectionStatus(status) {
+    const el = document.getElementById('connectionStatus');
+    if (status === 'connected') {
+        el.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已連接';
+    } else {
+        el.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 未連接';
+    }
+}
+
+function updateMetric(pin, value, timestamp) {
+    const valEl = document.getElementById(`value-${pin}`);
+    const timeEl = document.getElementById(`time-${pin}`);
+    if (valEl) {
+        const num = Number(value);
+        valEl.textContent = Number.isFinite(num) ? num.toFixed(2) : value;
+    }
+    if (timeEl && timestamp) {
+        timeEl.textContent = new Date(timestamp).toLocaleTimeString('zh-TW');
+    }
+}
+
+function updateStats(pin, values) {
+    if (!values.length) return;
+    document.getElementById(`min-${pin}`).textContent = Math.min(...values).toFixed(2);
+    document.getElementById(`max-${pin}`).textContent = Math.max(...values).toFixed(2);
+    document.getElementById(`avg-${pin}`).textContent = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
+    document.getElementById(`count-${pin}`).textContent = values.length;
+}
+
+function loadChartData(pin) {
+    const cfg = getViewConfig();
+    const style = widgetTypes[pin] || cfg.defaultWidgetStyle;
+    const sourceType = cfg.sourceType;
+    const hours = cfg.timeRange;
+    const url = `/dashboard/api/device/${deviceMac}/data/${pin}?hours=${hours}&limit=500&source=${sourceType}`;
+
+    return fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            const points = data
+                .map(d => ({
+                    label: new Date(d.timestamp).toLocaleString('zh-TW', { hour12: false }),
+                    value: Number(d.value)
+                }))
+                .filter(p => Number.isFinite(p.value));
+            historyCache[pin] = points;
+            const ds = datastreams.find(x => x.pin === pin) || {};
+            const color = ds.color || '#1f6feb';
+            const slot = document.getElementById(`widget-${pin}`);
+            if (!slot) return;
+
+            if (widgets[pin]) widgets[pin].destroy();
+            widgets[pin] = DashboardWidgets.create(style, {
+                container: slot,
+                label: ds.name || pin,
+                color,
+                unit: ds.unit || '',
+                minValue: Number(ds.min_value),
+                maxValue: Number(ds.max_value)
             });
-        }
 
-        // 初始化 WebSocket
-        const socket = io();
-        
-        socket.on('connect', () => {
-            console.log('[WebSocket] Connected');
-            updateConnectionStatus('connected');
-            socket.emit('subscribe_device', { device_mac: deviceMac });
-        });
-        
-        socket.on('disconnect', () => {
-            console.log('[WebSocket] Disconnected');
-            updateConnectionStatus('disconnected');
-        });
-        
-        socket.on('data_update', (data) => {
-            if (data.device_mac === deviceMac) {
-                console.log('[WebSocket] Data update:', data);
-                updateMetric(data.pin, data.value, data.timestamp);
-                addChartData(data.pin, data.value, data.timestamp);
-            }
-        });
-        
-        function updateConnectionStatus(status) {
-            const statusEl = document.getElementById('connectionStatus');
-            if (status === 'connected') {
-                statusEl.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已連接';
-            } else {
-                statusEl.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 未連接';
-            }
-        }
-        
-        function updateMetric(pin, value, timestamp) {
-            const valueEl = document.getElementById(`value-${pin}`);
-            const timeEl = document.getElementById(`time-${pin}`);
-            
-            if (valueEl) {
-                // 格式化數值
-                let displayValue = value;
-                if (!isNaN(value)) {
-                    displayValue = parseFloat(value).toFixed(2);
-                }
-                valueEl.innerHTML = displayValue;
-            }
-            
-            if (timeEl) {
-                const date = new Date(timestamp);
-                timeEl.textContent = `更新於 ${date.toLocaleTimeString('zh-TW')}`;
-            }
-        }
-        
-        function initChart(pin, data) {
-            const ctx = document.getElementById(`chart-${pin}`);
-            if (!ctx) return;
-            
-            const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString('zh-TW'));
-            const values = data.map(d => parseFloat(d.value) || 0);
-            
-            chartData[pin] = { labels, values };
-            
-            charts[pin] = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: pin,
-                        data: values,
-                        borderColor: 'rgb(102, 126, 234)',
-                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: false
-                        }
-                    }
-                }
+            widgets[pin].setHistory(points);
+            updateStats(pin, points.map(p => p.value));
+        })
+        .catch(err => console.error('loadChartData error', pin, err));
+}
+
+function reloadAllCharts() {
+    saveViewConfig();
+    Promise.all(datastreams.map(ds => loadChartData(ds.pin)));
+}
+
+function setAllWidgetType(style) {
+    document.querySelectorAll('.ds-widget-type').forEach((sel) => {
+        sel.value = style;
+        widgetTypes[sel.dataset.pin] = style;
+    });
+    reloadAllCharts();
+}
+
+function refreshAllData() {
+    fetch(`/dashboard/api/device/${deviceMac}/datastreams`)
+        .then(res => res.json())
+        .then(streams => {
+            streams.forEach(ds => {
+                if (ds.latest_value !== null) updateMetric(ds.pin, ds.latest_value, ds.latest_time);
             });
-            
-            // 更新統計
-            if (values.length > 0) {
-                document.getElementById(`min-${pin}`).textContent = Math.min(...values).toFixed(2);
-                document.getElementById(`max-${pin}`).textContent = Math.max(...values).toFixed(2);
-                document.getElementById(`avg-${pin}`).textContent = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2);
-                document.getElementById(`count-${pin}`).textContent = values.length;
-            }
-        }
-        
-        function addChartData(pin, value, timestamp) {
-            if (!charts[pin]) return;
-            
-            const chart = charts[pin];
-            const label = new Date(timestamp).toLocaleTimeString('zh-TW');
-            const numValue = parseFloat(value) || 0;
-            
-            chart.data.labels.push(label);
-            chart.data.datasets[0].data.push(numValue);
-            
-            // 限制數據點數量
-            if (chart.data.labels.length > 100) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
-            }
-            
-            chart.update('none');
-        }
-        
-        function loadChartData(pin, hours = 24) {
-            fetch(`/dashboard/api/device/${deviceMac}/data/${pin}?hours=${hours}&limit=100`)
-                .then(res => res.json())
-                .then(data => {
-                    initChart(pin, data);
-                })
-                .catch(err => console.error(`Error loading data for ${pin}:`, err));
-        }
-        
-        function changeTimeRange(pin, hours) {
-            if (charts[pin]) {
-                charts[pin].destroy();
-            }
-            loadChartData(pin, hours);
-        }
-        
-        function refreshAllData() {
-            fetch(`/dashboard/api/device/${deviceMac}/datastreams`)
-                .then(res => res.json())
-                .then(streams => {
-                    streams.forEach(ds => {
-                        if (ds.latest_value) {
-                            updateMetric(ds.pin, ds.latest_value, ds.latest_time);
-                        }
-                    });
-                })
-                .catch(err => console.error('Error refreshing data:', err));
-        }
-        
-        // 初始化所有圖表
-        datastreams.forEach(ds => {
-            loadChartData(ds.pin, 24);
         });
-        
-        // 載入初始數據
-        refreshAllData();
-        
-        // 每10秒自動刷新
-        setInterval(refreshAllData, 10000);
-    </script>
-</body>
-</html>
+}
+
+function setControlResult(message, level) {
+    const el = document.getElementById('controlResult');
+    el.textContent = message;
+    el.className = 'small mt-2';
+    if (level === 'success') el.classList.add('text-success');
+    else if (level === 'error') el.classList.add('text-danger');
+    else el.classList.add('text-muted');
+}
+
+function sendControlCommand() {
+    const pin = document.getElementById('controlPin').value;
+    const value = document.getElementById('controlValue').value;
+
+    if (!pin) {
+        setControlResult('請先選擇控制 Pin', 'error');
+        return;
+    }
+    if (!value) {
+        setControlResult('請輸入控制值', 'error');
+        return;
+    }
+
+    fetch(`/dashboard/device/${deviceMac}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin, value })
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok || data.status !== 'ok') {
+            setControlResult(`發送失敗：${data.message || '未知錯誤'}`, 'error');
+            return;
+        }
+        setControlResult(`已發送控制：${pin} = ${value}`, 'success');
+    })
+    .catch(err => {
+        setControlResult(`發送失敗：${err.message}`, 'error');
+    });
+}
+
+function rebootDevice() {
+    if (!confirm('確定要重啟此設備嗎？')) return;
+
+    fetch(`/dashboard/device/${deviceMac}/reboot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json().then(data => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok || data.status !== 'ok') {
+            setControlResult(`重啟命令失敗：${data.message || '未知錯誤'}`, 'error');
+            return;
+        }
+        setControlResult('重啟命令已送出', 'success');
+    })
+    .catch(err => {
+        setControlResult(`重啟命令失敗：${err.message}`, 'error');
+    });
+}
+
+function openEditDsModal(id, pin, name, unit, color, min, max) {
+    document.getElementById('editDsId').value = id;
+    document.getElementById('modalPin').textContent = pin;
+    document.getElementById('editDsName').value = name;
+    document.getElementById('editDsUnit').value = unit;
+    document.getElementById('editDsColor').value = color;
+    document.getElementById('editDsMin').value = min;
+    document.getElementById('editDsMax').value = max;
+    editDsModal.show();
+}
+
+function saveDsSettings() {
+    const id = document.getElementById('editDsId').value;
+    const payload = {
+        name: document.getElementById('editDsName').value,
+        unit: document.getElementById('editDsUnit').value,
+        color: document.getElementById('editDsColor').value,
+        min_value: document.getElementById('editDsMin').value,
+        max_value: document.getElementById('editDsMax').value
+    };
+
+    fetch(`/dashboard/datastream/${id}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            editDsModal.hide();
+            location.reload();
+        }
+    });
+}
+
+socket.on('connect', () => {
+    updateConnectionStatus('connected');
+    socket.emit('subscribe_device', { device_mac: deviceMac });
+});
+socket.on('disconnect', () => updateConnectionStatus('disconnected'));
+socket.on('data_update', (data) => {
+    if (data.device_mac !== deviceMac) return;
+    updateMetric(data.pin, data.value, data.timestamp);
+    if (widgets[data.pin]) {
+        widgets[data.pin].setLatest(data.value);
+    }
+
+    const num = Number(data.value);
+    if (Number.isFinite(num)) {
+        const cache = historyCache[data.pin] || [];
+        cache.push({
+            label: new Date(data.timestamp || Date.now()).toLocaleString('zh-TW', { hour12: false }),
+            value: num
+        });
+        if (cache.length > 500) cache.shift();
+        historyCache[data.pin] = cache;
+        updateStats(data.pin, cache.map(p => p.value));
+    }
+});
+
+document.getElementById('defaultWidgetStyle').addEventListener('change', (e) => {
+    setAllWidgetType(e.target.value);
+});
+document.getElementById('sourceType').addEventListener('change', reloadAllCharts);
+document.getElementById('timeRange').addEventListener('change', reloadAllCharts);
+document.getElementById('saveViewBtn').addEventListener('click', () => {
+    saveViewConfig();
+    reloadAllCharts();
+});
+document.getElementById('resetViewBtn').addEventListener('click', resetViewConfig);
+document.getElementById('refreshBtn').addEventListener('click', refreshAllData);
+document.getElementById('sendControlBtn').addEventListener('click', sendControlCommand);
+document.getElementById('rebootBtn').addEventListener('click', rebootDevice);
+document.getElementById('deviceSwitch').addEventListener('change', (e) => {
+    const mac = e.target.value;
+    if (mac !== deviceMac) window.location.href = `/dashboard/device/${mac}`;
+});
+document.querySelectorAll('.ds-widget-type').forEach((sel) => {
+    sel.addEventListener('change', (e) => {
+        const pin = e.target.dataset.pin;
+        widgetTypes[pin] = e.target.value;
+        reloadAllCharts();
+    });
+});
+
+applyViewConfig(DashboardPrefs.load(PREF_KEY, { defaultWidgetStyle: 'line', sourceType: 'raw', timeRange: 24, perPinWidget: {} }));
+reloadAllCharts();
+refreshAllData();
+setInterval(refreshAllData, 10000);
+</script>
+{% endblock %}

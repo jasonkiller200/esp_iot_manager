@@ -17,6 +17,10 @@
 
 #include <ArduinoJson.h>
 #include <WiFiManager.h>
+#include <PubSubClient.h>
+
+#define OUTPUT_DIGITAL 0
+#define OUTPUT_PWM 1
 
 class ESP_IoT_Manager {
 public:
@@ -64,12 +68,26 @@ public:
     
     // 註冊接收控制指令的回調函式
     void onControlMessage(void (*callback)(String pin, String value));
+
+    // 註冊系統指令回調（例如 reboot）
+    void onSystemCommand(void (*callback)(String action, String payload));
+
+    // 啟用 MQTT 遠端控制模組
+    void enableRemoteControl(bool enable = true, const char* mqttHost = nullptr, uint16_t mqttPort = 1883);
+
+    // 動態調整 MQTT Broker
+    void setMqttServer(const char* mqttHost, uint16_t mqttPort = 1883);
+
+    // 設定控制 Pin 映射（讓使用者只需 map，不必手寫 parser）
+    void mapControlPin(const char* virtualPin, uint8_t gpio, uint8_t mode = OUTPUT_DIGITAL, int minValue = 0, int maxValue = 255);
+    void clearControlPinMappings();
     
     // 手動觸發 OTA 更新
     void checkOTA();
     
     // 取得連線狀態
     bool isConnected();
+    bool isRemoteControlEnabled();
     String getMacAddress();
     String getLocalIP();
 
@@ -89,6 +107,27 @@ private:
     WebSocketsClient _webSocket;
     bool _wsConnected;
 
+    // MQTT 客戶端（遠端控制）
+    WiFiClient _mqttWiFiClient;
+    PubSubClient _mqttClient;
+    bool _remoteControlEnabled;
+    String _mqttHost;
+    uint16_t _mqttPort;
+    unsigned long _lastMqttRetry;
+    unsigned long _mqttRetryInterval;
+
+    // 控制映射
+    static const int MAX_CONTROL_MAPPINGS = 16;
+    struct ControlPinMapping {
+        String virtualPin;
+        uint8_t gpio;
+        uint8_t mode;
+        int minValue;
+        int maxValue;
+    };
+    ControlPinMapping _controlMappings[MAX_CONTROL_MAPPINGS];
+    int _controlMappingCount;
+
     // 配網設定
     bool _useProvisioning;
     String _apNamePrefix;
@@ -103,10 +142,16 @@ private:
     
     // 回調函式
     void (*_controlCallback)(String pin, String value);
+    void (*_systemCallback)(String action, String payload);
     
     // 內部函式
     bool connectWiFi();
     bool reportStatus();
+    void ensureMqttConnection();
+    void handleMqttMessage(char* topic, byte* payload, unsigned int length);
+    void handleControlTopic(const String& topic, const String& payload);
+    bool applyMappedControl(const String& pin, const String& value);
+    void publishControlAck(const String& event, const String& message);
     String buildUrl(const String& path);
     bool httpGet(const String& path, int* code = nullptr, String* response = nullptr);
     bool httpPostJson(const String& path, const String& body, int* code = nullptr, String* response = nullptr);

@@ -1,181 +1,132 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT 即時監控儀表板</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.0/font/bootstrap-icons.css">
-    <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        .dashboard-container {
-            padding: 2rem 0;
-        }
-        .stat-card {
-            background: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            margin-bottom: 1.5rem;
-            transition: transform 0.2s;
-        }
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
-        }
-        .stat-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-        .stat-label {
-            color: #6c757d;
-            font-size: 0.9rem;
-        }
-        .device-card {
-            background: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s;
-        }
-        .device-card:hover {
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-        .status-badge {
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 500;
-        }
-        .status-online {
-            background: #d4edda;
-            color: #155724;
-        }
-        .status-offline {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .header-title {
-            color: white;
-            font-weight: bold;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-        }
-        .connection-status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-    </style>
-</head>
-<body>
-    <div class="connection-status" id="connectionStatus">
-        <i class="bi bi-circle-fill text-warning pulse"></i> 連接中...
-    </div>
+{% extends "base_dashboard.html" %}
 
-    <div class="container dashboard-container">
-        <div class="text-center mb-4">
-            <h1 class="header-title">
-                <i class="bi bi-speedometer2"></i> IoT 即時監控儀表板
-            </h1>
-            <p class="text-white">即時監控您的 ESP8266/ESP32 設備</p>
-            <a href="/dashboard/live" class="btn btn-warning btn-lg mt-2 shadow">
-                <i class="bi bi-display"></i> 進入全螢幕即時儀表板
+{% block title %}IoT 監控儀表板{% endblock %}
+
+{% block body %}
+<div class="connection-status" id="connectionStatus">
+    <i class="bi bi-circle-fill text-warning"></i> 連接中...
+</div>
+
+<div class="container app-page">
+    <div class="app-header">
+        <div>
+            <h1 class="app-title"><i class="bi bi-speedometer2"></i> IoT 監控儀表板</h1>
+            <p class="app-subtitle">統一管理設備狀態、資料流與即時監控</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/dashboard/live" class="btn btn-primary">
+                <i class="bi bi-display"></i> 全螢幕即時視圖
+            </a>
+            <a href="/" class="btn btn-outline-secondary">
+                <i class="bi bi-house"></i> 管理控制台
             </a>
         </div>
+    </div>
 
-        <!-- 統計卡片 -->
-        <div class="row">
-            <div class="col-md-4">
-                <div class="stat-card text-center">
-                    <i class="bi bi-cpu stat-icon text-primary"></i>
-                    <div class="stat-number" id="totalDevices">{{ total_devices }}</div>
-                    <div class="stat-label">總設備數</div>
-                </div>
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong><i class="bi bi-funnel"></i> 儀表板篩選器</strong>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" id="resetFiltersBtn">重設</button>
+                <button class="btn btn-sm btn-outline-primary" id="saveFiltersBtn">儲存偏好</button>
             </div>
-            <div class="col-md-4">
-                <div class="stat-card text-center">
-                    <i class="bi bi-wifi stat-icon text-success"></i>
-                    <div class="stat-number" id="onlineDevices">{{ online_devices }}</div>
-                    <div class="stat-label">線上設備</div>
+        </div>
+        <div class="app-card-body">
+            <div class="toolbar">
+                <div class="toolbar-item">
+                    <label for="statusFilter">設備狀態</label>
+                    <select id="statusFilter" class="form-select form-select-sm">
+                        <option value="all">全部</option>
+                        <option value="online">僅線上</option>
+                        <option value="offline">僅離線</option>
+                    </select>
                 </div>
-            </div>
-            <div class="col-md-4">
-                <div class="stat-card text-center">
-                    <i class="bi bi-wifi-off stat-icon text-danger"></i>
-                    <div class="stat-number" id="offlineDevices">{{ total_devices - online_devices }}</div>
-                    <div class="stat-label">離線設備</div>
+                <div class="toolbar-item wide">
+                    <label for="deviceFilter">設備</label>
+                    <select id="deviceFilter" class="form-select form-select-sm" multiple size="4">
+                        {% for device in devices %}
+                        <option value="{{ device.mac }}">{{ device.name or device.mac }} ({{ device.mac }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="toolbar-item wide">
+                    <label for="pinFilter">資料來源 (Pin)</label>
+                    <select id="pinFilter" class="form-select form-select-sm" multiple size="4">
+                        {% for pin in available_pins %}
+                        <option value="{{ pin }}">{{ pin }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="toolbar-item">
+                    <label for="refreshRate">刷新秒數</label>
+                    <select id="refreshRate" class="form-select form-select-sm">
+                        <option value="10">10 秒</option>
+                        <option value="30" selected>30 秒</option>
+                        <option value="60">60 秒</option>
+                    </select>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- 設備列表 -->
+    <div class="stat-grid mb-3">
         <div class="stat-card">
-            <h3 class="mb-4">
-                <i class="bi bi-list-ul"></i> 設備列表
-                <button class="btn btn-sm btn-outline-primary float-end" onclick="refreshDevices()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                </button>
-            </h3>
+            <div class="stat-label">總設備數</div>
+            <div class="stat-number" id="totalDevices">{{ total_devices }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">線上設備</div>
+            <div class="stat-number" id="onlineDevices">{{ online_devices }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">離線設備</div>
+            <div class="stat-number" id="offlineDevices">{{ total_devices - online_devices }}</div>
+        </div>
+    </div>
+
+    <div class="app-card mb-3">
+        <div class="app-card-header">
+            <strong><i class="bi bi-list-ul"></i> 設備列表</strong>
+            <button class="btn btn-sm btn-outline-primary" onclick="refreshDevices()">
+                <i class="bi bi-arrow-clockwise"></i> 重新整理
+            </button>
+        </div>
+        <div class="app-card-body">
             <div id="devicesList">
                 {% for device in devices %}
-                <div class="device-card" data-mac="{{ device.mac }}">
-                    <div class="row align-items-center">
-                        <div class="col-md-3">
-                            <h5 class="mb-1">
-                                <i class="bi bi-router"></i> 
-                                <span id="name-{{ device.mac }}">{{ device.name or device.mac }}</span>
-                            </h5>
-                            <small class="text-muted">{{ device.chip_type }} ({{ device.mac }})</small>
+                {% set pins = device_pins.get(device.mac, []) %}
+                <div class="device-card" data-mac="{{ device.mac }}" data-status="{% if device.is_online() %}online{% else %}offline{% endif %}" data-pins="{{ pins|join(',') }}">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-md-4">
+                            <div class="fw-bold" id="name-{{ device.mac }}">{{ device.name or device.mac }}</div>
+                            <small class="text-muted">{{ device.chip_type or 'N/A' }} | {{ device.mac }}</small>
                         </div>
-                        <div class="col-md-2">
-                            <small class="text-muted">IP 地址</small>
+                        <div class="col-md-2 small">
+                            <div class="text-muted">IP</div>
                             <div>{{ device.ip or 'N/A' }}</div>
                         </div>
-                        <div class="col-md-2">
-                            <small class="text-muted">韌體版本</small>
+                        <div class="col-md-2 small">
+                            <div class="text-muted">韌體</div>
                             <div>{{ device.version or 'N/A' }}</div>
                         </div>
-                        <div class="col-md-2">
-                            <small class="text-muted">最後上線</small>
-                            <div class="last-seen">
-                                {{ device.last_seen.strftime('%H:%M:%S') if device.last_seen else 'N/A' }}
-                            </div>
+                        <div class="col-md-2 small">
+                            <div class="text-muted">資料來源</div>
+                            <div>{{ pins|join(', ') if pins else 'N/A' }}</div>
                         </div>
-                        <div class="col-md-2">
-                            <span class="status-badge {% if device.is_online() %}status-online{% else %}status-offline{% endif %}">
-                                <i class="bi bi-circle-fill"></i> 
+                        <div class="col-md-1">
+                            <span class="status-pill {% if device.is_online() %}online{% else %}offline{% endif %}">
                                 {% if device.is_online() %}線上{% else %}離線{% endif %}
                             </span>
                         </div>
-                        <div class="col-md-1">
-                            <div class="btn-group">
-                                <a href="/dashboard/device/{{ device.mac }}" class="btn btn-sm btn-primary" title="監控">
+                        <div class="col-md-1 text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/dashboard/device/{{ device.mac }}" class="btn btn-outline-primary" title="查看">
                                     <i class="bi bi-graph-up"></i>
                                 </a>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="openEditModal('{{ device.mac }}', '{{ device.name or '' }}')" title="編輯">
+                                <button class="btn btn-outline-secondary" onclick="openEditModal('{{ device.mac }}', '{{ device.name or '' }}')" title="編輯">
                                     <i class="bi bi-pencil"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteDevice('{{ device.mac }}')" title="刪除">
+                                <button class="btn btn-outline-danger" onclick="deleteDevice('{{ device.mac }}')" title="刪除">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -183,161 +134,206 @@
                     </div>
                 </div>
                 {% endfor %}
-                
-                {% if not devices %}
-                <div class="text-center text-muted py-5">
-                    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-                    <p class="mt-3">尚未偵測到任何設備</p>
-                </div>
-                {% endif %}
             </div>
+            <div class="text-center text-muted py-4 d-none" id="emptyHint">沒有符合條件的設備</div>
         </div>
+    </div>
+</div>
 
-        <!-- 快速導航 -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="stat-card">
-                    <h5><i class="bi bi-house-door"></i> 主控台</h5>
-                    <p class="text-muted">管理韌體和設備更新</p>
-                    <a href="/" class="btn btn-outline-primary">前往主控台</a>
-                </div>
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">編輯設備名稱</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="col-md-6">
-                <div class="stat-card">
-                    <h5><i class="bi bi-code-slash"></i> API 文檔</h5>
-                    <p class="text-muted">查看 API 端點和使用說明</p>
-                    <a href="/api/docs" class="btn btn-outline-primary">查看文檔</a>
-                </div>
+            <div class="modal-body">
+                <input type="hidden" id="editMac">
+                <label class="form-label">設備名稱</label>
+                <input type="text" class="form-control" id="editName" placeholder="例如：客廳 ESP32">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveDeviceName()">儲存</button>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <div class="modal fade" id="editModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">編輯設備名稱</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="editMac">
-                    <div class="mb-3">
-                        <label class="form-label">設備名稱</label>
-                        <input type="text" class="form-control" id="editName" placeholder="例如：客廳 ESP32">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="button" class="btn btn-primary" onclick="saveDeviceName()">儲存變更</button>
-                </div>
-            </div>
-        </div>
-    </div>
+{% block scripts %}
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<script>
+const PREF_KEY = 'main_filters_v1';
+const socket = io();
+let refreshTimer = null;
+const editModal = new bootstrap.Modal(document.getElementById('editModal'));
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script>
-        // 初始化 Modal
-        const editModal = new bootstrap.Modal(document.getElementById('editModal'));
+function openEditModal(mac, name) {
+    document.getElementById('editMac').value = mac;
+    document.getElementById('editName').value = name;
+    editModal.show();
+}
 
-        function openEditModal(mac, name) {
-            document.getElementById('editMac').value = mac;
-            document.getElementById('editName').value = name;
-            editModal.show();
+function saveDeviceName() {
+    const mac = document.getElementById('editMac').value;
+    const name = document.getElementById('editName').value;
+    fetch(`/dashboard/device/${mac}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            const el = document.getElementById(`name-${mac}`);
+            if (el) el.textContent = data.name || mac;
+            editModal.hide();
         }
+    });
+}
 
-        function saveDeviceName() {
-            const mac = document.getElementById('editMac').value;
-            const name = document.getElementById('editName').value;
+function deleteDevice(mac) {
+    if (!confirm(`確定要刪除設備 ${mac} 嗎？此操作將刪除所有歷史數據。`)) return;
+    fetch(`/dashboard/device/${mac}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            const node = document.querySelector(`.device-card[data-mac="${mac}"]`);
+            if (node) node.remove();
+            applyFilters();
+        }
+    });
+}
 
-            fetch(`/dashboard/device/${mac}/edit`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'ok') {
-                    const nameSpan = document.getElementById(`name-${mac}`);
-                    if (nameSpan) nameSpan.textContent = data.name || mac;
-                    editModal.hide();
+function getMultiSelectValues(selectId) {
+    return Array.from(document.getElementById(selectId).selectedOptions).map(opt => opt.value);
+}
+
+function setMultiSelectValues(selectId, values) {
+    const set = new Set(values || []);
+    const select = document.getElementById(selectId);
+    Array.from(select.options).forEach(opt => {
+        opt.selected = set.has(opt.value);
+    });
+}
+
+function getFilters() {
+    return {
+        status: document.getElementById('statusFilter').value,
+        devices: getMultiSelectValues('deviceFilter'),
+        pins: getMultiSelectValues('pinFilter'),
+        refresh: Number(document.getElementById('refreshRate').value || 30)
+    };
+}
+
+function applyFilters() {
+    const filters = getFilters();
+    const deviceSet = new Set(filters.devices);
+    const pinSet = new Set(filters.pins);
+
+    let total = 0;
+    let online = 0;
+    let visibleCount = 0;
+
+    document.querySelectorAll('.device-card').forEach(card => {
+        total += 1;
+        const status = card.dataset.status;
+        if (status === 'online') online += 1;
+
+        const mac = card.dataset.mac;
+        const pins = (card.dataset.pins || '').split(',').filter(Boolean);
+
+        const statusMatch = filters.status === 'all' || status === filters.status;
+        const deviceMatch = deviceSet.size === 0 || deviceSet.has(mac);
+        const pinMatch = pinSet.size === 0 || pins.some(pin => pinSet.has(pin));
+
+        const visible = statusMatch && deviceMatch && pinMatch;
+        card.classList.toggle('d-none', !visible);
+        if (visible) visibleCount += 1;
+    });
+
+    document.getElementById('emptyHint').classList.toggle('d-none', visibleCount > 0);
+    document.getElementById('totalDevices').textContent = total;
+    document.getElementById('onlineDevices').textContent = online;
+    document.getElementById('offlineDevices').textContent = total - online;
+
+    DashboardPrefs.save(PREF_KEY, filters);
+    setupRefresh(filters.refresh);
+}
+
+function setupRefresh(seconds) {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(refreshDevices, seconds * 1000);
+}
+
+function loadSavedFilters() {
+    const saved = DashboardPrefs.load(PREF_KEY, null);
+    if (!saved) return;
+    if (saved.status) document.getElementById('statusFilter').value = saved.status;
+    if (saved.refresh) document.getElementById('refreshRate').value = String(saved.refresh);
+    setMultiSelectValues('deviceFilter', saved.devices || []);
+    setMultiSelectValues('pinFilter', saved.pins || []);
+}
+
+function resetFilters() {
+    document.getElementById('statusFilter').value = 'all';
+    document.getElementById('refreshRate').value = '30';
+    setMultiSelectValues('deviceFilter', []);
+    setMultiSelectValues('pinFilter', []);
+    DashboardPrefs.clear(PREF_KEY);
+    applyFilters();
+}
+
+function refreshDevices() {
+    fetch('/dashboard/api/devices')
+        .then(res => res.json())
+        .then(devices => {
+            const map = new Map(devices.map(d => [d.mac, d]));
+            document.querySelectorAll('.device-card').forEach(card => {
+                const mac = card.dataset.mac;
+                const data = map.get(mac);
+                if (!data) return;
+
+                const status = data.is_online ? 'online' : 'offline';
+                card.dataset.status = status;
+                card.dataset.pins = (data.pins || []).join(',');
+
+                const statusEl = card.querySelector('.status-pill');
+                if (statusEl) {
+                    statusEl.className = `status-pill ${status}`;
+                    statusEl.textContent = data.is_online ? '線上' : '離線';
                 }
             });
-        }
+            applyFilters();
+        })
+        .catch(err => console.error('refreshDevices error', err));
+}
 
-        function deleteDevice(mac) {
-            if (confirm(`確定要刪除設備 ${mac} 嗎？此操作將刪除所有歷史數據。`)) {
-                fetch(`/dashboard/device/${mac}/delete`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.status === 'ok') {
-                        location.reload();
-                    }
-                });
-            }
-        }
+function updateConnectionStatus(status) {
+    const el = document.getElementById('connectionStatus');
+    if (status === 'connected') {
+        el.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已連接';
+    } else {
+        el.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 未連接';
+    }
+}
 
-        // 初始化 WebSocket
-        const socket = io();
-        
-        socket.on('connect', () => {
-            console.log('[WebSocket] Connected');
-            updateConnectionStatus('connected');
-        });
-        
-        socket.on('disconnect', () => {
-            console.log('[WebSocket] Disconnected');
-            updateConnectionStatus('disconnected');
-        });
-        
-        socket.on('device_status', (data) => {
-            console.log('[WebSocket] Device status update:', data);
-            refreshDevices();
-        });
-        
-        socket.on('data_update', (data) => {
-            console.log('[WebSocket] Data update:', data);
-        });
-        
-        function updateConnectionStatus(status) {
-            const statusEl = document.getElementById('connectionStatus');
-            if (status === 'connected') {
-                statusEl.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已連接';
-            } else {
-                statusEl.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 未連接';
-            }
-        }
-        
-        function refreshDevices() {
-            fetch('/dashboard/api/devices')
-                .then(res => res.json())
-                .then(devices => {
-                    updateDeviceStats(devices);
-                })
-                .catch(err => console.error('Error fetching devices:', err));
-        }
-        
-        function updateDeviceStats(devices) {
-            const online = devices.filter(d => d.is_online).length;
-            const total = devices.length;
-            
-            document.getElementById('totalDevices').textContent = total;
-            document.getElementById('onlineDevices').textContent = online;
-            document.getElementById('offlineDevices').textContent = total - online;
-        }
-        
-        // 每30秒自動刷新
-        setInterval(refreshDevices, 30000);
-        
-        // 更新時間顯示
-        setInterval(() => {
-            document.querySelectorAll('.last-seen').forEach(el => {
-                // 可以在這裡添加相對時間顯示邏輯
-            });
-        }, 1000);
-    </script>
-</body>
-</html>
+socket.on('connect', () => updateConnectionStatus('connected'));
+socket.on('disconnect', () => updateConnectionStatus('disconnected'));
+socket.on('device_status', refreshDevices);
+
+document.getElementById('statusFilter').addEventListener('change', applyFilters);
+document.getElementById('deviceFilter').addEventListener('change', applyFilters);
+document.getElementById('pinFilter').addEventListener('change', applyFilters);
+document.getElementById('refreshRate').addEventListener('change', applyFilters);
+document.getElementById('saveFiltersBtn').addEventListener('click', applyFilters);
+document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
+
+loadSavedFilters();
+applyFilters();
+</script>
+{% endblock %}

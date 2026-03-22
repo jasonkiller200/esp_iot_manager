@@ -2,7 +2,8 @@
 
 ESP_IoT_Manager* ESP_IoT_Manager::_instance = nullptr;
 
-ESP_IoT_Manager::ESP_IoT_Manager(const char* ssid, const char* password, const char* serverIP, int serverPort) {
+ESP_IoT_Manager::ESP_IoT_Manager(const char* ssid, const char* password, const char* serverIP, int serverPort)
+    : _mqttClient(_mqttWiFiClient) {
     _ssid = ssid;
     _password = password;
     _serverIP = serverIP;
@@ -18,6 +19,13 @@ ESP_IoT_Manager::ESP_IoT_Manager(const char* ssid, const char* password, const c
     _apPassword = "";
     _portalTimeoutSec = 180;
     _instance = this;
+    _remoteControlEnabled = false;
+    _mqttHost = serverIP ? String(serverIP) : String("127.0.0.1");
+    _mqttPort = 1883;
+    _lastMqttRetry = 0;
+    _mqttRetryInterval = 5000;
+    _controlMappingCount = 0;
+    _systemCallback = nullptr;
     
 #ifdef ESP32
     _chipType = "ESP32";
@@ -61,6 +69,14 @@ bool ESP_IoT_Manager::begin(const char* deviceVersion) {
         }
     });
     _webSocket.setReconnectInterval(5000);
+
+    // 初始化 MQTT 控制
+    _mqttClient.setServer(_mqttHost.c_str(), _mqttPort);
+    _mqttClient.setCallback([](char* topic, byte* payload, unsigned int length) {
+        if (_instance) {
+            _instance->handleMqttMessage(topic, payload, length);
+        }
+    });
     
     Serial.println("=== Initialization Complete ===\n");
     return true;
@@ -79,6 +95,12 @@ void ESP_IoT_Manager::loop() {
 
     // 處理 WebSocket
     _webSocket.loop();
+
+    // 處理 MQTT 控制
+    if (_remoteControlEnabled) {
+        ensureMqttConnection();
+        _mqttClient.loop();
+    }
     
     // 定期心跳
     if (millis() - _lastHeartbeat > _heartbeatInterval) {
@@ -274,6 +296,66 @@ void ESP_IoT_Manager::onControlMessage(void (*callback)(String pin, String value
     _controlCallback = callback;
 }
 
+void ESP_IoT_Manager::onSystemCommand(void (*callback)(String action, String payload)) {
+    _systemCallback = callback;
+}
+
+void ESP_IoT_Manager::enableRemoteControl(bool enable, const char* mqttHost, uint16_t mqttPort) {
+    _remoteControlEnabled = enable;
+    if (mqttHost != nullptr && mqttHost[0] != '\0') {
+        _mqttHost = mqttHost;
+    }
+    if (mqttPort > 0) {
+        _mqttPort = mqttPort;
+    }
+    _mqttClient.setServer(_mqttHost.c_str(), _mqttPort);
+}
+
+void ESP_IoT_Manager::setMqttServer(const char* mqttHost, uint16_t mqttPort) {
+    if (mqttHost != nullptr && mqttHost[0] != '\0') {
+        _mqttHost = mqttHost;
+    }
+    if (mqttPort > 0) {
+        _mqttPort = mqttPort;
+    }
+    _mqttClient.setServer(_mqttHost.c_str(), _mqttPort);
+}
+
+void ESP_IoT_Manager::mapControlPin(const char* virtualPin, uint8_t gpio, uint8_t mode, int minValue, int maxValue) {
+    if (virtualPin == nullptr || virtualPin[0] == '\0') {
+        return;
+    }
+
+    for (int i = 0; i < _controlMappingCount; i++) {
+        if (_controlMappings[i].virtualPin.equalsIgnoreCase(virtualPin)) {
+            _controlMappings[i].gpio = gpio;
+            _controlMappings[i].mode = mode;
+            _controlMappings[i].minValue = minValue;
+            _controlMappings[i].maxValue = maxValue;
+            pinMode(gpio, OUTPUT);
+            return;
+        }
+    }
+
+    if (_controlMappingCount >= MAX_CONTROL_MAPPINGS) {
+        Serial.println("[CTRL] Max mapping count reached");
+        return;
+    }
+
+    _controlMappings[_controlMappingCount].virtualPin = virtualPin;
+    _controlMappings[_controlMappingCount].gpio = gpio;
+    _controlMappings[_controlMappingCount].mode = mode;
+    _controlMappings[_controlMappingCount].minValue = minValue;
+    _controlMappings[_controlMappingCount].maxValue = maxValue;
+    _controlMappingCount++;
+
+    pinMode(gpio, OUTPUT);
+}
+
+void ESP_IoT_Manager::clearControlPinMappings() {
+    _controlMappingCount = 0;
+}
+
 void ESP_IoT_Manager::handleWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     switch (type) {
         case WStype_DISCONNECTED:
@@ -328,6 +410,148 @@ void ESP_IoT_Manager::checkOTA() {
             Serial.println("[OTA] Update successful, rebooting...");
             break;
     }
+}
+
+void ESP_IoT_Manager::ensureMqttConnection() {
+    if (!_remoteControlEnabled) {
+        return;
+    }
+
+    if (_mqttClient.connected()) {
+        return;
+    }
+
+    if (millis() - _lastMqttRetry < _mqttRetryInterval) {
+        return;
+    }
+    _lastMqttRetry = millis();
+
+    String clientId = "esp-iot-" + _macAddress;
+    clientId.replace(":", "");
+
+    Serial.printf("[MQTT] Connecting to %s:%d ...\n", _mqttHost.c_str(), _mqttPort);
+    if (!_mqttClient.connect(clientId.c_str())) {
+        Serial.printf("[MQTT] Connect failed rc=%d\n", _mqttClient.state());
+        return;
+    }
+
+    String controlTopic = "devices/" + _macAddress + "/control/+";
+    bool ok = _mqttClient.subscribe(controlTopic.c_str(), 1);
+    if (ok) {
+        Serial.printf("[MQTT] Subscribed %s\n", controlTopic.c_str());
+        publishControlAck("connected", "remote control online");
+    } else {
+        Serial.printf("[MQTT] Subscribe failed %s\n", controlTopic.c_str());
+    }
+}
+
+void ESP_IoT_Manager::handleMqttMessage(char* topic, byte* payload, unsigned int length) {
+    String topicStr = topic ? String(topic) : String();
+    String payloadStr;
+    payloadStr.reserve(length + 1);
+    for (unsigned int i = 0; i < length; i++) {
+        payloadStr += (char)payload[i];
+    }
+
+    handleControlTopic(topicStr, payloadStr);
+}
+
+void ESP_IoT_Manager::handleControlTopic(const String& topic, const String& payload) {
+    String prefix = "devices/" + _macAddress + "/control/";
+    if (!topic.startsWith(prefix)) {
+        return;
+    }
+
+    String controlPin = topic.substring(prefix.length());
+    Serial.printf("[CTRL] %s = %s\n", controlPin.c_str(), payload.c_str());
+
+    if (controlPin.equalsIgnoreCase("system")) {
+        StaticJsonDocument<192> doc;
+        DeserializationError err = deserializeJson(doc, payload);
+        if (err) {
+            publishControlAck("error", "invalid system payload");
+            return;
+        }
+
+        String action = doc["action"] | "";
+        if (action.length() == 0) {
+            publishControlAck("error", "system action missing");
+            return;
+        }
+
+        if (_systemCallback) {
+            _systemCallback(action, payload);
+        } else {
+            if (action.equalsIgnoreCase("reboot")) {
+                publishControlAck("reboot", "restarting");
+                delay(150);
+#ifdef ESP32
+                ESP.restart();
+#else
+                ESP.reset();
+#endif
+            }
+        }
+        return;
+    }
+
+    bool mapped = applyMappedControl(controlPin, payload);
+    if (_controlCallback) {
+        _controlCallback(controlPin, payload);
+    }
+
+    if (mapped || _controlCallback != nullptr) {
+        publishControlAck("ok", controlPin + "=" + payload);
+    } else {
+        publishControlAck("warn", "unhandled control pin " + controlPin);
+    }
+}
+
+bool ESP_IoT_Manager::applyMappedControl(const String& pin, const String& value) {
+    for (int i = 0; i < _controlMappingCount; i++) {
+        if (!_controlMappings[i].virtualPin.equalsIgnoreCase(pin)) {
+            continue;
+        }
+
+        int gpio = _controlMappings[i].gpio;
+        uint8_t mode = _controlMappings[i].mode;
+        int numeric = value.toInt();
+
+        if (mode == OUTPUT_PWM) {
+#ifdef ESP32
+            int pwm = constrain(numeric, _controlMappings[i].minValue, _controlMappings[i].maxValue);
+            int duty = map(pwm, _controlMappings[i].minValue, _controlMappings[i].maxValue, 0, 255);
+            analogWrite(gpio, duty);
+#else
+            int pwm = constrain(numeric, _controlMappings[i].minValue, _controlMappings[i].maxValue);
+            analogWrite(gpio, pwm);
+#endif
+        } else {
+            bool isOn = (numeric > 0) || value.equalsIgnoreCase("ON") || value.equalsIgnoreCase("HIGH") || value.equalsIgnoreCase("true");
+            digitalWrite(gpio, isOn ? HIGH : LOW);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+void ESP_IoT_Manager::publishControlAck(const String& event, const String& message) {
+    if (!_mqttClient.connected()) {
+        return;
+    }
+
+    String topic = "devices/" + _macAddress + "/status";
+    StaticJsonDocument<192> doc;
+    doc["event"] = event;
+    doc["message"] = message;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["version"] = _deviceVersion;
+    doc["online"] = true;
+
+    String payload;
+    serializeJson(doc, payload);
+    _mqttClient.publish(topic.c_str(), payload.c_str(), false);
 }
 
 String ESP_IoT_Manager::buildUrl(const String& path) {
@@ -387,6 +611,10 @@ bool ESP_IoT_Manager::httpPostJson(const String& path, const String& body, int* 
 
 bool ESP_IoT_Manager::isConnected() {
     return WiFi.status() == WL_CONNECTED;
+}
+
+bool ESP_IoT_Manager::isRemoteControlEnabled() {
+    return _remoteControlEnabled;
 }
 
 String ESP_IoT_Manager::getMacAddress() {

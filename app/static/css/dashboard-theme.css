@@ -1,0 +1,178 @@
+:root {
+    --bg-main: #f4f7fb;
+    --bg-elevated: #ffffff;
+    --bg-panel: #edf2f9;
+    --text-primary: #172b4d;
+    --text-secondary: #5e6c84;
+    --accent: #1f6feb;
+    --accent-soft: rgba(31, 111, 235, 0.12);
+    --success: #1f9d63;
+    --danger: #d14343;
+    --border: #dfe5ef;
+    --shadow: 0 10px 30px rgba(23, 43, 77, 0.08);
+}
+
+body.app-shell {
+    background:
+        radial-gradient(circle at 10% 0%, #d9e7ff 0%, transparent 45%),
+        radial-gradient(circle at 95% 5%, #f2d9ff 0%, transparent 35%),
+        var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
+
+.app-page {
+    padding: 2rem 0 3rem;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.app-title {
+    margin: 0;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.app-subtitle {
+    margin: 0.25rem 0 0;
+    color: var(--text-secondary);
+}
+
+.app-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+}
+
+.app-card-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.app-card-body {
+    padding: 1.25rem;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.stat-number {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.toolbar {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 0.75rem;
+}
+
+.toolbar-item {
+    grid-column: span 3;
+}
+
+.toolbar-item.wide {
+    grid-column: span 6;
+}
+
+.toolbar label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.device-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.status-pill {
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-pill.online {
+    background: rgba(31, 157, 99, 0.13);
+    color: var(--success);
+}
+
+.status-pill.offline {
+    background: rgba(209, 67, 67, 0.12);
+    color: var(--danger);
+}
+
+.connection-status {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 1100;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
+    box-shadow: var(--shadow);
+}
+
+@media (max-width: 992px) {
+    .toolbar-item,
+    .toolbar-item.wide {
+        grid-column: span 6;
+    }
+}
+
+@media (max-width: 768px) {
+    .app-page {
+        padding: 1rem 0 2rem;
+    }
+
+    .app-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .toolbar-item,
+    .toolbar-item.wide {
+        grid-column: span 12;
+    }
+
+    .connection-status {
+        position: static;
+        margin-bottom: 0.75rem;
+        display: inline-block;
+    }
+}

@@ -32,6 +32,7 @@
 - `ArduinoJson` (v6.x)
 - `WebSockets` by Markus Sattler
 - `WiFiManager` by tzapu
+- `PubSubClient` by Nick O'Leary
 
 ## 快速開始
 
@@ -110,6 +111,39 @@ void loop() {
 }
 ```
 
+### 模組化遠端控制（MQTT，推薦）
+
+```cpp
+#include <ESP_IoT_Manager.h>
+
+ESP_IoT_Manager iot("192.168.50.170", 5000);
+
+void onSystem(String action, String payload) {
+  if (action == "reboot") {
+    ESP.restart();
+  }
+}
+
+void setup() {
+  iot.enableProvisioning(true, "ESP-IoT-Setup", "", 180);
+  iot.begin("1.2.0");
+
+  // 啟用 MQTT 遠端控制，預設 broker 1883
+  iot.enableRemoteControl(true, "192.168.50.170", 1883);
+
+  // 只要宣告 mapping，不需自行寫 topic parser
+  iot.mapControlPin("V10", 2, OUTPUT_DIGITAL);      // LED
+  iot.mapControlPin("V11", 5, OUTPUT_PWM, 0, 1023); // PWM
+
+  // 可選：系統指令（例如 dashboard 的 reboot）
+  iot.onSystemCommand(onSystem);
+}
+
+void loop() {
+  iot.loop();
+}
+```
+
 ## API 參考
 
 ### 初始化
@@ -134,6 +168,12 @@ bool registerDatastream(pin, name, min, max, unit, dataType)  // 註冊 Datastre
 ```cpp
 void onControlMessage(callback)  // 註冊接收指令的回調函式
 // 回調格式: void callback(String pin, String value)
+
+void enableRemoteControl(enable, mqttHost, mqttPort)
+void setMqttServer(mqttHost, mqttPort)
+void mapControlPin(virtualPin, gpio, mode, minValue, maxValue)
+void clearControlPinMappings()
+void onSystemCommand(callback)
 ```
 
 ### OTA 更新
@@ -174,6 +214,7 @@ Library 會自動呼叫以下 API：
 
 - `BasicUsage.ino` - 基本數據上傳
 - `RemoteControl.ino` - 即時控制 LED
+- `RemoteControlMQTT.ino` - 模組化 MQTT 遠端控制（含 reboot）
 
 ## 授權
 
