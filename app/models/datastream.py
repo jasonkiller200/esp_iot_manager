@@ -36,6 +36,10 @@ class DataPoint(db.Model):
     value = db.Column(db.String(100))  # 存為字串以支援多種類型
     timestamp = db.Column(db.DateTime, default=get_taipei_time, index=True)
 
+    __table_args__ = (
+        db.Index("idx_datapoint_device_pin_ts", "device_mac", "pin", "timestamp"),
+    )
+
     def __repr__(self):
         return f"<DataPoint {self.device_mac}:{self.pin}={self.value}>"
 
@@ -58,6 +62,7 @@ class HourlyAggregate(db.Model):
         db.UniqueConstraint(
             "device_mac", "pin", "hour_bucket", name="_device_pin_hour_uc"
         ),
+        db.Index("idx_hourly_device_pin_bucket", "device_mac", "pin", "hour_bucket"),
     )
 
     def __repr__(self):

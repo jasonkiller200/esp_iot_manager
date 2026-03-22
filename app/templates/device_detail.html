@@ -140,6 +140,7 @@
                 <div class="item">
                     <label class="form-label small">資料來源</label>
                     <select id="sourceType" class="form-select form-select-sm">
+                        <option value="auto" selected>自動（24h內 raw，超過用 hourly）</option>
                         <option value="raw">即時原始資料</option>
                         <option value="hourly">小時彙總資料</option>
                     </select>
@@ -339,7 +340,7 @@ function saveViewConfig() {
 
 function resetViewConfig() {
     DashboardPrefs.clear(PREF_KEY);
-    applyViewConfig({ defaultWidgetStyle: 'line', sourceType: 'raw', timeRange: 24, perPinWidget: {} });
+    applyViewConfig({ defaultWidgetStyle: 'line', sourceType: 'auto', timeRange: 24, perPinWidget: {} });
     reloadAllCharts();
 }
 
@@ -578,7 +579,7 @@ document.querySelectorAll('.ds-widget-type').forEach((sel) => {
     });
 });
 
-applyViewConfig(DashboardPrefs.load(PREF_KEY, { defaultWidgetStyle: 'line', sourceType: 'raw', timeRange: 24, perPinWidget: {} }));
+applyViewConfig(DashboardPrefs.load(PREF_KEY, { defaultWidgetStyle: 'line', sourceType: 'auto', timeRange: 24, perPinWidget: {} }));
 reloadAllCharts();
 refreshAllData();
 setInterval(refreshAllData, 10000);

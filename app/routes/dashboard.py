@@ -154,6 +154,10 @@ def api_device_data(device_mac, pin):
 
     cutoff = datetime.now(TAIPEI_TZ) - timedelta(hours=hours)
 
+    # 自動來源切換：長時段優先查詢小時聚合
+    if source == "auto":
+        source = "hourly" if hours > 24 else "raw"
+
     if source == "hourly":
         rows = (
             HourlyAggregate.query.filter(
@@ -308,6 +312,28 @@ def delete_device(device_mac):
     db.session.commit()
 
     return jsonify({"status": "ok"})
+
+
+@dashboard_bp.route("/admin/db-health", methods=["GET"])
+def db_health():
+    """簡易 DB 健康檢查（供維運與排程驗證）"""
+    try:
+        raw_count = DataPoint.query.count()
+        hourly_count = HourlyAggregate.query.count()
+        latest_raw = db.session.query(func.max(DataPoint.timestamp)).scalar()
+        latest_hourly = db.session.query(func.max(HourlyAggregate.hour_bucket)).scalar()
+
+        return jsonify(
+            {
+                "status": "ok",
+                "raw_count": raw_count,
+                "hourly_count": hourly_count,
+                "latest_raw": latest_raw.isoformat() if latest_raw else None,
+                "latest_hourly": latest_hourly.isoformat() if latest_hourly else None,
+            }
+        )
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @dashboard_bp.route("/datastream/<int:ds_id>/edit", methods=["POST"])
