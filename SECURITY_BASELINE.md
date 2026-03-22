@@ -57,3 +57,12 @@ App 啟動時會檢查以下項目並記錄 warning：
 
 - `SECRET_KEY` 是否仍為預設值
 - `WRITE_API_TOKEN` 是否為空
+
+## 6) MQTT 寫入效能參數
+
+可透過環境變數調整批次寫入：
+
+- `MQTT_FLUSH_BATCH_SIZE`（預設 100）
+- `MQTT_FLUSH_INTERVAL_SEC`（預設 2 秒）
+
+目的：降低每筆資料即時 commit 帶來的資料庫壓力。

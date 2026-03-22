@@ -17,6 +17,8 @@ class Config:
     MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
     MQTT_USERNAME = os.getenv("MQTT_USERNAME")
     MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
+    MQTT_FLUSH_BATCH_SIZE = int(os.getenv("MQTT_FLUSH_BATCH_SIZE", "100"))
+    MQTT_FLUSH_INTERVAL_SEC = int(os.getenv("MQTT_FLUSH_INTERVAL_SEC", "2"))
 
     @classmethod
     def validate_security(cls):
