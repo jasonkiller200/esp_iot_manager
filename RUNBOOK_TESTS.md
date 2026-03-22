@@ -12,6 +12,15 @@ venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 venv\Scripts\python.exe -m pytest tests -q
 ```
 
+## 2.1) GitHub Actions CI
+
+已加入 CI workflow：`.github/workflows/ci.yml`
+
+- 觸發：`push` / `pull_request` 到 `master`
+- 流程：
+  1. `py_compile`（語法檢查）
+  2. `pytest tests -q`
+
 ## 3) 基本健康檢查
 
 啟動後可檢查：

@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install Flask Flask-SQLAlchemy Flask-Migrate Flask-SocketIO paho-mqtt SQLAlchemy
+          pip install -r requirements-dev.txt
+
+      - name: Syntax check (py_compile)
+        run: |
+          python -m py_compile run.py config.py aggregate_data.py backup_restore.py
+          python -m py_compile app/__init__.py app/auth.py app/mqtt_manager.py
+          python -m py_compile app/routes/main.py app/routes/api.py app/routes/dashboard.py
+          python -m py_compile app/models/device.py app/models/firmware.py app/models/datastream.py app/models/command.py
+
+      - name: Run pytest
+        run: |
+          pytest tests -q
