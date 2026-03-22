@@ -1,0 +1,101 @@
+name: CD Deploy
+
+on:
+  push:
+    branches: ["master"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Deploy target environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  precheck:
+    runs-on: ubuntu-latest
+    outputs:
+      staging_ready: ${{ steps.check.outputs.staging_ready }}
+      production_ready: ${{ steps.check.outputs.production_ready }}
+    steps:
+      - name: Check required secrets
+        id: check
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_APP_PATH: ${{ secrets.STAGING_APP_PATH }}
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_APP_PATH: ${{ secrets.PROD_APP_PATH }}
+        run: |
+          stage_ok=true
+          prod_ok=true
+          for v in STAGING_HOST STAGING_USER STAGING_SSH_KEY STAGING_APP_PATH; do
+            if [ -z "${!v}" ]; then stage_ok=false; fi
+          done
+          for v in PROD_HOST PROD_USER PROD_SSH_KEY PROD_APP_PATH; do
+            if [ -z "${!v}" ]; then prod_ok=false; fi
+          done
+          echo "staging_ready=$stage_ok" >> "$GITHUB_OUTPUT"
+          echo "production_ready=$prod_ok" >> "$GITHUB_OUTPUT"
+
+  deploy-staging:
+    needs: precheck
+    if: >
+      (github.event_name == 'push' && needs.precheck.outputs.staging_ready == 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'staging' && needs.precheck.outputs.staging_ready == 'true')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to staging via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.STAGING_APP_PATH }}"
+            git pull origin master
+            docker compose pull || true
+            docker compose up -d --build
+
+  deploy-production:
+    needs: precheck
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.target == 'production' &&
+      needs.precheck.outputs.production_ready == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to production via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            cd "${{ secrets.PROD_APP_PATH }}"
+            git pull origin master
+            docker compose pull || true
+            docker compose up -d --build
+
+  deploy-skipped-note:
+    needs: precheck
+    if: >
+      (github.event_name == 'push' && needs.precheck.outputs.staging_ready != 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'staging' && needs.precheck.outputs.staging_ready != 'true') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'production' && needs.precheck.outputs.production_ready != 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain skipped deploy
+        run: |
+          echo "Deploy skipped because required repository secrets are missing."
+          echo "Please configure STAGING_* and/or PROD_* secrets first."

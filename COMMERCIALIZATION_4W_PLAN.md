@@ -118,6 +118,7 @@
 4. 自動化測試與 CI
    - API smoke test
    - 控制流程整合測試
+   - CD staging 自動部署 + production 手動部署
 5. 發布文件與 SOP
    - 部署手冊
    - 故障排除手冊
